@@ -88,6 +88,7 @@ test_redirect_limit_cannot_be_raised_after_session_setup (tests.test_requests_ad
 test_redirect_to_loopback_is_rejected_before_second_send (tests.test_requests_adapter.SafeRequestsSessionTests.test_redirect_to_loopback_is_rejected_before_second_send) ... ok
 test_requests_parser_canonicalization_cannot_hide_loopback (tests.test_requests_adapter.SafeRequestsSessionTests.test_requests_parser_canonicalization_cannot_hide_loopback) ... ok
 test_requests_redirect_loop_stops_at_policy_limit (tests.test_requests_adapter.SafeRequestsSessionTests.test_requests_redirect_loop_stops_at_policy_limit) ... ok
+test_session_basic_auth_is_not_forwarded_across_origins (tests.test_requests_adapter.SafeRequestsSessionTests.test_session_basic_auth_is_not_forwarded_across_origins) ... ok
 test_streaming_response_option_is_rejected (tests.test_requests_adapter.SafeRequestsSessionTests.test_streaming_response_option_is_rejected) ... ok
 test_module_level_get_keeps_common_requests_behavior (tests.test_requests_compat.RequestsCompatibilityTests.test_module_level_get_keeps_common_requests_behavior) ... ok
 test_module_level_request_accepts_explicit_policy_and_rejects_proxy (tests.test_requests_compat.RequestsCompatibilityTests.test_module_level_request_accepts_explicit_policy_and_rejects_proxy) ... ok
@@ -107,6 +108,6 @@ test_public_resource_returns_urlopen_style_buffered_response (tests.test_urllib_
 test_redirect_to_loopback_is_rejected_before_second_send (tests.test_urllib_adapter.SafeUrllibOpenerTests.test_redirect_to_loopback_is_rejected_before_second_send) ... ok
 
 ----------------------------------------------------------------------
-Ran 105 tests in 0.392s
+Ran 106 tests in 0.392s
 
 OK (skipped=1)

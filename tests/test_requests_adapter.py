@@ -380,6 +380,37 @@ class SafeRequestsSessionTests(unittest.TestCase):
         self.assertNotIn("cookie", sent[1][1])
         self.assertNotIn("origin", sent[1][1])
 
+    def test_session_basic_auth_is_not_forwarded_across_origins(self) -> None:
+        fetcher = SafeFetcher()
+        sent: list[tuple[str, dict[str, str]]] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, body, timeout_seconds
+            sent.append((target.host, {key.lower(): value for key, value in headers.items()}))
+            if target.host == "public.example":
+                return FetchResponse(
+                    302,
+                    (("Location", "https://other.example/next"),),
+                    b"",
+                    target.url,
+                    (),
+                    method,
+                )
+            return FetchResponse(200, (), b"PUBLIC_FIXTURE_CONTENT", target.url, (), method)
+
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 443))]
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            fetcher, "_send", side_effect=simulated_send
+        ):
+            with SafeRequestsSession(fetcher=fetcher) as client:
+                client.auth = ("dummy-user", "dummy-password")
+                response = client.get("https://public.example/start")
+
+        self.assertEqual(response.content, b"PUBLIC_FIXTURE_CONTENT")
+        self.assertIn("authorization", sent[0][1])
+        self.assertTrue(sent[0][1]["authorization"].startswith("Basic "))
+        self.assertNotIn("authorization", sent[1][1])
+
     def test_streaming_response_option_is_rejected(self) -> None:
         with SafeRequestsSession() as client:
             with self.assertRaises(PolicyError):
