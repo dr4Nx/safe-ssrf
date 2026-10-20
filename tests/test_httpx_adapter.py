@@ -113,6 +113,41 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("cookie", sent[1][1])
         self.assertNotIn("origin", sent[1][1])
 
+    async def test_async_httpx_basic_auth_is_not_forwarded_across_origins(self) -> None:
+        from safe_egress.httpx_adapter import SafeAsyncClient
+
+        fetcher = SafeFetcher()
+        sent: list[tuple[str, dict[str, str]]] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, body, timeout_seconds
+            sent.append((target.host, {key.lower(): value for key, value in headers.items()}))
+            if target.host == "public.example":
+                return FetchResponse(
+                    302,
+                    (("Location", "https://other.example/next"),),
+                    b"",
+                    target.url,
+                    (),
+                    method,
+                )
+            return FetchResponse(200, (), b"PUBLIC_FIXTURE_CONTENT", target.url, (), method)
+
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 443))]
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            fetcher, "_send", side_effect=simulated_send
+        ):
+            async with SafeAsyncClient(
+                fetcher=fetcher,
+                follow_redirects=True,
+                auth=("dummy-user", "dummy-password"),
+            ) as client:
+                response = await client.get("https://public.example/start")
+
+        self.assertEqual(response.text, "PUBLIC_FIXTURE_CONTENT")
+        self.assertIn("authorization", sent[0][1])
+        self.assertNotIn("authorization", sent[1][1])
+
     async def test_safe_client_rejects_options_that_could_replace_its_transport(self) -> None:
         from safe_egress.httpx_adapter import SafeAsyncClient
 
@@ -225,6 +260,41 @@ class SafeHTTPXSyncTransportTests(unittest.TestCase):
         self.assertNotIn("authorization", sent[1][1])
         self.assertNotIn("cookie", sent[1][1])
         self.assertNotIn("origin", sent[1][1])
+
+    def test_sync_httpx_basic_auth_is_not_forwarded_across_origins(self) -> None:
+        from safe_egress.httpx_adapter import SafeClient
+
+        fetcher = SafeFetcher()
+        sent: list[tuple[str, dict[str, str]]] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, body, timeout_seconds
+            sent.append((target.host, {key.lower(): value for key, value in headers.items()}))
+            if target.host == "public.example":
+                return FetchResponse(
+                    302,
+                    (("Location", "https://other.example/next"),),
+                    b"",
+                    target.url,
+                    (),
+                    method,
+                )
+            return FetchResponse(200, (), b"PUBLIC_FIXTURE_CONTENT", target.url, (), method)
+
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 443))]
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            fetcher, "_send", side_effect=simulated_send
+        ):
+            with SafeClient(
+                fetcher=fetcher,
+                follow_redirects=True,
+                auth=("dummy-user", "dummy-password"),
+            ) as client:
+                response = client.get("https://public.example/start")
+
+        self.assertEqual(response.text, "PUBLIC_FIXTURE_CONTENT")
+        self.assertIn("authorization", sent[0][1])
+        self.assertNotIn("authorization", sent[1][1])
 
     def test_sync_httpx_rejects_oversized_streaming_request_before_send(self) -> None:
         from safe_egress.httpx_adapter import SafeClient
