@@ -81,6 +81,18 @@ with SafeRequestsSession(policy=FetchPolicy()) as session:
     response = session.get(user_url, headers={"Accept": "text/html"}, timeout=8)
 ```
 
+For common module-level calls, replace the Requests import with the scoped compatibility facade:
+
+```python
+import safe_egress.requests_compat as requests
+
+response = requests.get(user_url, timeout=8)
+with requests.Session() as session:
+    response = session.post(upload_url, data=b"bounded body")
+```
+
+The facade provides `request`, `get`, `options`, `head`, `post`, `put`, `patch`, `delete`, and `Session`, along with Requests response and exception types. It is not a full Requests implementation: unsupported options such as proxies, streaming, custom TLS configuration, and multipart uploads fail closed in the adapter.
+
 An application can supply a trusted, request-specific policy when one fetch needs a different destination set:
 
 ```python
@@ -145,7 +157,7 @@ with SafeUrllibOpener().open(user_url, timeout=5) as response:
     content = response.read()
 ```
 
-These adapters do not patch process-wide functions. Requests, HTTPX, urllib3, and urllib request facades route through `SafeFetcher` and buffer bounded request/response bodies. `SafeRequestsSession` supports trusted per-request `policy=` overrides, applies them across redirects, and locks its redirect cap, `mount()` method, and public adapter table after setup. `SafeUrllib3Client` is not a `PoolManager` subclass: it supports a deliberately small request interface, rejects unknown options, and does not implement pools, proxies, retries, streaming, or multipart encoding. `SafeUrllibOpener` handles only HTTP(S), bounded bodies, headers, and numeric timeouts; it does not implement opener handlers, cookies, proxies, custom TLS contexts, or streaming. The aiohttp adapter retains streaming and caps bytes returned by response read methods and iterators at `FetchPolicy.max_response_bytes`. aiohttp may buffer or decompress a chunk before the wrapper can enforce that limit, so the cap does not bound every transient internal allocation. The adapter checks redirects, caps redirect hops, strips sensitive headers on cross-origin hops, and disables proxies, cookie jars, custom connectors, custom request and response classes, middleware, custom TLS settings, caller-supplied `Host` headers, URL credentials, and per-request cookies. Review each application's required features before using an adapter. The aiohttp adapter uses aiohttp's connector resolver, request-class, and response-class hooks; rerun its tests when upgrading aiohttp.
+These adapters do not patch process-wide functions. Requests, HTTPX, urllib3, and urllib request facades route through `SafeFetcher` and buffer bounded request/response bodies. `SafeRequestsSession` supports trusted per-request `policy=` overrides, applies them across redirects, and locks its redirect cap, `mount()` method, and public adapter table after setup. `requests_compat` offers a limited module-shaped facade for common Requests calls and `Session`; it is not a complete drop-in replacement. `SafeUrllib3Client` is not a `PoolManager` subclass: it supports a deliberately small request interface, rejects unknown options, and does not implement pools, proxies, retries, streaming, or multipart encoding. `SafeUrllibOpener` handles only HTTP(S), bounded bodies, headers, and numeric timeouts; it does not implement opener handlers, cookies, proxies, custom TLS contexts, or streaming. The aiohttp adapter retains streaming and caps bytes returned by response read methods and iterators at `FetchPolicy.max_response_bytes`. aiohttp may buffer or decompress a chunk before the wrapper can enforce that limit, so the cap does not bound every transient internal allocation. The adapter checks redirects, caps redirect hops, strips sensitive headers on cross-origin hops, and disables proxies, cookie jars, custom connectors, custom request and response classes, middleware, custom TLS settings, caller-supplied `Host` headers, URL credentials, and per-request cookies. Review each application's required features before using an adapter. The aiohttp adapter uses aiohttp's connector resolver, request-class, and response-class hooks; rerun its tests when upgrading aiohttp.
 
 `SafeClient` and `SafeAsyncClient` are the HTTPX integrations for synchronous and asynchronous applications. Both disable environment proxy use and reject options that could replace the policy transport. Their transports are available for explicit wiring; installing one into a general HTTPX client with custom proxy mounts can route around it. `RequestsGet` remains a small GET-only facade for simple call sites.
 
