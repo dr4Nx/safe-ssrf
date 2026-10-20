@@ -183,6 +183,24 @@ class SafeRequestsSessionTests(unittest.TestCase):
         self.assertEqual(response.content, b"ok")
         self.assertEqual(sent_bodies, [b"payload"])
 
+    def test_multipart_upload_is_rejected_before_file_is_read(self) -> None:
+        class TrackedFile(BytesIO):
+            read_calls = 0
+
+            def read(self, *args, **kwargs):
+                self.read_calls += 1
+                return super().read(*args, **kwargs)
+
+        file_body = TrackedFile(b"dummy upload content")
+        with SafeRequestsSession() as client:
+            with self.assertRaisesRegex(PolicyError, "Multipart file uploads are unsupported"):
+                client.post(
+                    "https://public.example/upload",
+                    files={"document": ("dummy.txt", file_body)},
+                )
+
+        self.assertEqual(file_body.read_calls, 0)
+
     def test_per_request_policy_requires_a_policy_object(self) -> None:
         with SafeRequestsSession() as client:
             with self.assertRaises(PolicyError):

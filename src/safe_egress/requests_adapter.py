@@ -44,8 +44,8 @@ class SafeRequestsAdapter(BaseAdapter):
     follows redirects and routes each hop back through this adapter, where
     SafeFetcher validates and pins the destination under the active policy.
     Streaming responses, proxy use, custom TLS verification settings, client
-    certificates, and iterable upload bodies are rejected because this adapter
-    does not implement those behaviors.
+    certificates, multipart file uploads, and iterable upload bodies are
+    rejected because this adapter does not implement those behaviors.
     """
 
     def __init__(self, fetcher: SafeFetcher | None = None, *, policy: FetchPolicy | None = None) -> None:
@@ -213,6 +213,8 @@ class SafeRequestsSession(requests.Session):
         """
         if policy is not None and not isinstance(policy, FetchPolicy):
             raise PolicyError("policy must be a FetchPolicy")
+        if kwargs.get("files") is not None:
+            raise PolicyError("Multipart file uploads are unsupported by SafeRequestsSession")
         if policy is not None and policy.max_redirects != self.max_redirects:
             raise PolicyError(
                 "A per-request policy must use the session's configured redirect limit"
