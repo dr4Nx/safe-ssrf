@@ -4,6 +4,7 @@ import gzip
 import ipaddress
 import socket
 import unittest
+import zlib
 from unittest.mock import Mock, patch
 
 from safe_egress import (
@@ -325,6 +326,40 @@ class SafeFetcherTests(unittest.TestCase):
             with self.assertRaises(ResponseTooLargeError):
                 fetcher._send(SafeFetcher._parse_target("http://public.example/"), PUBLIC_IP, {})
         connection.close.assert_called_once()
+
+    def test_compressed_content_codings_cover_members_and_exact_limit(self) -> None:
+        from safe_egress.client import _decode_response_body
+
+        exact_body = b"x" * 1024
+        decoded, _headers = _decode_response_body(
+            gzip.compress(exact_body), (("Content-Encoding", "gzip"),), len(exact_body)
+        )
+        self.assertEqual(decoded, exact_body)
+
+        concatenated_gzip = gzip.compress(b"first") + gzip.compress(b"second")
+        decoded, _headers = _decode_response_body(
+            concatenated_gzip, (("Content-Encoding", "gzip"),), 11
+        )
+        self.assertEqual(decoded, b"firstsecond")
+
+        wrapped_deflate = zlib.compress(b"wrapped deflate")
+        decoded, _headers = _decode_response_body(
+            wrapped_deflate, (("Content-Encoding", "deflate"),), 32
+        )
+        self.assertEqual(decoded, b"wrapped deflate")
+
+        raw_deflater = zlib.compressobj(wbits=-zlib.MAX_WBITS)
+        raw_deflate = raw_deflater.compress(b"raw deflate") + raw_deflater.flush()
+        decoded, _headers = _decode_response_body(
+            raw_deflate, (("Content-Encoding", "deflate"),), 32
+        )
+        self.assertEqual(decoded, b"raw deflate")
+
+        stacked = zlib.compress(gzip.compress(b"stacked coding"))
+        decoded, _headers = _decode_response_body(
+            stacked, (("Content-Encoding", "gzip, deflate"),), 64
+        )
+        self.assertEqual(decoded, b"stacked coding")
 
     def test_headers_cannot_override_host_or_proxy_routing(self) -> None:
         for headers in ({"Host": "127.0.0.1"}, {"Proxy-Authorization": "dummy"}, {"X-Test": "bad\r\nvalue"}):

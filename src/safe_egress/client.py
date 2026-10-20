@@ -77,7 +77,11 @@ def _decode_response_body(
             remaining = decoded
             members = bytearray()
             while remaining:
-                member, remaining = _inflate_bounded(remaining, zlib.MAX_WBITS | 16, limit - len(members))
+                member, remaining = _inflate_bounded(
+                    remaining,
+                    zlib.MAX_WBITS | 16,
+                    limit - len(members),
+                )
                 members.extend(member)
                 if len(members) > limit:
                     raise ResponseTooLargeError("Decoded response body exceeded the configured byte limit")

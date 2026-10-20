@@ -26,6 +26,7 @@ test_recognizes_all_safe_client_wrappers (tests.test_audit.SinkInventoryTests.te
 test_tracks_client_factory_returned_from_an_instance_method (tests.test_audit.SinkInventoryTests.test_tracks_client_factory_returned_from_an_instance_method) ... ok
 test_tracks_sessions_assigned_to_instance_attributes (tests.test_audit.SinkInventoryTests.test_tracks_sessions_assigned_to_instance_attributes) ... ok
 test_alternate_numeric_hosts_are_checked_after_resolution (tests.test_client.SafeFetcherTests.test_alternate_numeric_hosts_are_checked_after_resolution) ... ok
+test_compressed_content_codings_cover_members_and_exact_limit (tests.test_client.SafeFetcherTests.test_compressed_content_codings_cover_members_and_exact_limit) ... ok
 test_dns_failure_and_empty_answers_fail_closed (tests.test_client.SafeFetcherTests.test_dns_failure_and_empty_answers_fail_closed) ... ok
 test_exact_private_host_exception_can_fetch_simulated_service (tests.test_client.SafeFetcherTests.test_exact_private_host_exception_can_fetch_simulated_service) ... ok
 test_gzip_expansion_cannot_exceed_response_body_limit (tests.test_client.SafeFetcherTests.test_gzip_expansion_cannot_exceed_response_body_limit) ... ok
@@ -106,6 +107,6 @@ test_public_resource_returns_urlopen_style_buffered_response (tests.test_urllib_
 test_redirect_to_loopback_is_rejected_before_second_send (tests.test_urllib_adapter.SafeUrllibOpenerTests.test_redirect_to_loopback_is_rejected_before_second_send) ... ok
 
 ----------------------------------------------------------------------
-Ran 104 tests in 0.391s
+Ran 105 tests in 0.392s
 
 OK (skipped=1)
