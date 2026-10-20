@@ -245,6 +245,42 @@ class SafeRequestsSessionTests(unittest.TestCase):
 
         self.assertEqual(sends, ["http://public.example/start", "http://public.example/next"])
 
+    def test_307_redirect_preserves_post_body_through_requests(self) -> None:
+        fetcher = SafeFetcher()
+        sent: list[tuple[str, str, bytes | None]] = []
+        public_ip = ipaddress.ip_address("93.184.216.34")
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", (str(public_ip), 80))]
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, headers, timeout_seconds
+            sent.append((target.url, method, body))
+            if len(sent) == 1:
+                return FetchResponse(
+                    307,
+                    (("Location", "/continue"),),
+                    b"",
+                    target.url,
+                    (),
+                    method,
+                )
+            return FetchResponse(200, (), b"accepted", target.url, (), method)
+
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            fetcher, "_send", side_effect=simulated_send
+        ):
+            with SafeRequestsSession(fetcher=fetcher) as client:
+                response = client.post("http://public.example/start", data=b"dummy-post-body")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"accepted")
+        self.assertEqual(
+            sent,
+            [
+                ("http://public.example/start", "POST", b"dummy-post-body"),
+                ("http://public.example/continue", "POST", b"dummy-post-body"),
+            ],
+        )
+
     def test_redirect_to_loopback_is_rejected_before_second_send(self) -> None:
         fetcher = SafeFetcher()
         sent: list[str] = []
