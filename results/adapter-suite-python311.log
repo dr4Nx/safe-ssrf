@@ -5,6 +5,7 @@ test_explicit_zero_port_is_not_treated_as_default_http_port (tests.test_aiohttp_
 test_ip_literal_policy_is_checked_before_aiohttp_connector (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_ip_literal_policy_is_checked_before_aiohttp_connector) ... ok
 test_loopback_literal_is_rejected_without_dns (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_loopback_literal_is_rejected_without_dns) ... ok
 test_mixed_public_and_loopback_dns_results_are_rejected (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_mixed_public_and_loopback_dns_results_are_rejected) ... ok
+test_per_request_basic_auth_does_not_cross_origin_redirect (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_per_request_basic_auth_does_not_cross_origin_redirect) ... ok
 test_public_destination_is_returned_as_numeric_address (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_public_destination_is_returned_as_numeric_address) ... ok
 test_rejects_disallowed_ports_and_proxy_options (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_rejects_disallowed_ports_and_proxy_options) ... ok
 test_session_allows_public_request_through_policy_resolver (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_session_allows_public_request_through_policy_resolver) ... ok
@@ -101,6 +102,6 @@ test_public_resource_returns_urlopen_style_buffered_response (tests.test_urllib_
 test_redirect_to_loopback_is_rejected_before_second_send (tests.test_urllib_adapter.SafeUrllibOpenerTests.test_redirect_to_loopback_is_rejected_before_second_send) ... ok
 
 ----------------------------------------------------------------------
-Ran 99 tests in 0.357s
+Ran 100 tests in 0.364s
 
 OK (skipped=1)

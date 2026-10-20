@@ -370,6 +370,42 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(header, first_request)
             self.assertNotIn(header, second_request)
 
+    async def test_per_request_basic_auth_does_not_cross_origin_redirect(self) -> None:
+        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+
+        loop = asyncio.get_running_loop()
+        records = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 80))]
+        wire_responses = [
+            b"HTTP/1.1 302 Found\r\nLocation: http://other.example/next\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+        ]
+        resolver_call = AsyncMock(return_value=records)
+        transports: list[_FixtureTransport] = []
+
+        async def in_memory_connection(connector, factory, *args, **kwargs):
+            del connector, args, kwargs
+            protocol = factory()
+            transport = _FixtureTransport(loop, protocol, wire_responses[len(transports)])
+            transports.append(transport)
+            protocol.connection_made(transport)
+            return transport, protocol
+
+        with patch.object(loop, "getaddrinfo", new=resolver_call), patch.object(
+            aiohttp.TCPConnector, "_wrap_create_connection", new=in_memory_connection
+        ):
+            async with safe_aiohttp_session() as session:
+                async with session.get(
+                    "http://public.example/start",
+                    auth=aiohttp.BasicAuth("dummy-user", "dummy-password"),
+                ) as response:
+                    self.assertEqual(await response.read(), b"ok")
+
+        self.assertEqual(len(transports), 2)
+        first_request = b"".join(transports[0].writes).lower()
+        second_request = b"".join(transports[1].writes).lower()
+        self.assertIn(b"authorization: basic", first_request)
+        self.assertNotIn(b"authorization:", second_request)
+
     async def test_session_blocks_public_to_loopback_redirect_before_second_connection(self) -> None:
         from safe_egress.aiohttp_adapter import safe_aiohttp_session
 
