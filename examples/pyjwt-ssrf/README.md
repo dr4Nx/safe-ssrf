@@ -35,6 +35,20 @@ The scheme fixture uses PyJWT 2.12.1's actual `PyJWKClient.fetch_data()` to read
 
 All six modes passed locally under Python 3.13.0. The captured outputs and exact commands are in [`results/evaluation-python313.json`](results/evaluation-python313.json).
 
+## Repeatable evaluation
+
+With pytest and PyJWT's test dependencies already available, run the source controls and focused upstream tests together:
+
+```sh
+PYTHONPATH=src /path/to/python-with-pytest examples/pyjwt-ssrf/run_eval.py \
+  --vulnerable-redirect ../pyjwt-2.13.0 \
+  --vulnerable-scheme ../pyjwt-2.12.1 \
+  --fixed-redirect ../pyjwt-2.14.0 \
+  --fixed-scheme ../pyjwt-2.13.0
+```
+
+The runner performs no installation. It records source commits, per-phase commands, logs, and elapsed time. The latest Python 3.11 run passed all eight phases: 29 upstream tests on 2.13.0, and 37 tests on 2.14.0 after deselecting the upstream test that opens a real loopback listener. The local fixture reproduction covers that redirect behavior without a socket. Results are in [`results/evaluation-python311.json`](results/evaluation-python311.json).
+
 `safe_client.py` is an application integration example, not a replacement package for PyJWT. PyJWT does not expose a transport injection point, so an application that wants destination checks must route `fetch_data()` through a policy-enforcing opener or use an equivalent controlled wrapper. The redirect advisory requires an attacker-influenced redirect from the configured JWKS endpoint; this test supplies that redirect directly through its controlled fixture. The tests do not simulate JWT verification or key-poisoning consequences.
 
 ## Environment

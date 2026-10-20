@@ -1,0 +1,12 @@
+{
+  "file_scheme_rejected_at_construction": true,
+  "mode": "fixed-scheme",
+  "public_fixture_returned": "public JWKS fixture",
+  "public_requests": [
+    {
+      "headers": {},
+      "url": "http://public-fixture.test/jwks"
+    }
+  ],
+  "repository": "/Users/evanluo/Documents/Github/pyjwt-2.13.0"
+}
