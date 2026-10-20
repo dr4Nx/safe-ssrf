@@ -46,7 +46,7 @@ Run the dependency-free core suite:
 PYTHONPATH=src python3.11 -m unittest discover -v
 ```
 
-The tests never bind a port or contact an external system. Controlled resolver records and in-memory transports exercise request decisions and response handling. Adapter tests are skipped when their optional clients are absent. To run the complete adapter suite, provision the optional dependencies first, then run the same command:
+Most tests use controlled resolver records and in-memory transports. One socket integration test binds an ephemeral loopback port when the environment permits it; otherwise it skips with the bind error. No test contacts an external system. Adapter tests are skipped when their optional clients are absent. To run the complete adapter suite, provision the optional dependencies first, then run the same command:
 
 ```sh
 python3.11 -m pip install -e '.[requests,httpx,aiohttp,urllib3]'
