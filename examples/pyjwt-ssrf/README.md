@@ -33,6 +33,8 @@ The redirect fixture replaces only HTTP handling. It runs PyJWT's actual `PyJWKC
 
 The scheme fixture uses PyJWT 2.12.1's actual `PyJWKClient.fetch_data()` to read only a temporary file created by the test. PyJWT 2.13.0 rejects that URI at construction, and the Safe Egress integration rejects it at fetch time. Both still parse the public HTTP JWKS fixture. The temporary file contains no real data.
 
+All six modes passed locally under Python 3.13.0. The captured outputs and exact commands are in [`results/evaluation-python313.json`](results/evaluation-python313.json).
+
 `safe_client.py` is an application integration example, not a replacement package for PyJWT. PyJWT does not expose a transport injection point, so an application that wants destination checks must route `fetch_data()` through a policy-enforcing opener or use an equivalent controlled wrapper. The redirect advisory requires an attacker-influenced redirect from the configured JWKS endpoint; this test supplies that redirect directly through its controlled fixture. The tests do not simulate JWT verification or key-poisoning consequences.
 
 ## Environment

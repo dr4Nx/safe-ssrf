@@ -1,0 +1,154 @@
+{
+  "created_utc": "2026-10-20T09:54:14.725305+00:00",
+  "python": "3.13.0 (v3.13.0:60403a5409f, Oct  7 2024, 00:37:40) [Clang 15.0.0 (clang-1500.3.9.4)]",
+  "network": "in-memory fixtures, synthetic loopback, and a temporary dummy file only",
+  "cases": {
+    "redirect_vulnerable": {
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "examples/pyjwt-ssrf/reproduce.py",
+        "--repo",
+        "../pyjwt-2.13.0",
+        "--mode",
+        "vulnerable"
+      ],
+      "exit_code": 0,
+      "result": {
+        "dummy_authorization_seen_at_internal": true,
+        "internal_service_reached": true,
+        "mode": "vulnerable",
+        "repository": "/Users/evanluo/Documents/Github/pyjwt-2.13.0",
+        "requests": [
+          {
+            "headers": {
+              "authorization": "Bearer dummy-evaluation-token"
+            },
+            "url": "http://public-fixture.test/jwks"
+          },
+          {
+            "headers": {
+              "authorization": "Bearer dummy-evaluation-token"
+            },
+            "url": "http://127.0.0.1/internal-status"
+          }
+        ],
+        "returned_fixture": "SIMULATED INTERNAL SERVICE"
+      }
+    },
+    "redirect_fixed": {
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "examples/pyjwt-ssrf/reproduce.py",
+        "--repo",
+        "../pyjwt-2.14.0",
+        "--mode",
+        "fixed"
+      ],
+      "exit_code": 0,
+      "result": {
+        "loopback_blocked": true,
+        "mode": "fixed",
+        "public_fixture_returned": "public JWKS fixture",
+        "public_requests": [
+          {
+            "headers": {},
+            "url": "http://public-fixture.test/jwks"
+          }
+        ],
+        "redirect_requests": [
+          {
+            "headers": {
+              "authorization": "Bearer dummy-evaluation-token"
+            },
+            "url": "http://public-fixture.test/jwks"
+          }
+        ],
+        "repository": "/Users/evanluo/Documents/Github/pyjwt-2.14.0"
+      }
+    },
+    "redirect_hardened": {
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "examples/pyjwt-ssrf/reproduce.py",
+        "--repo",
+        "../pyjwt-2.13.0",
+        "--mode",
+        "hardened"
+      ],
+      "exit_code": 0,
+      "result": {
+        "loopback_blocked": true,
+        "mode": "hardened",
+        "network": "in-memory transport and synthetic DNS only; no sockets opened",
+        "public_fixture_returned": "public JWKS fixture",
+        "repository": "/Users/evanluo/Documents/Github/pyjwt-2.13.0",
+        "safe_egress_checked_urls": [
+          "http://public-fixture.test/jwks",
+          "http://public-fixture.test/jwks"
+        ]
+      }
+    },
+    "scheme_vulnerable": {
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "examples/pyjwt-ssrf/reproduce.py",
+        "--repo",
+        "../pyjwt-2.12.1",
+        "--mode",
+        "vulnerable-scheme"
+      ],
+      "exit_code": 0,
+      "result": {
+        "file_scheme_accepted": true,
+        "mode": "vulnerable-scheme",
+        "repository": "/Users/evanluo/Documents/Github/pyjwt-2.12.1",
+        "returned_fixture": "SIMULATED LOCAL FILE",
+        "target": "temporary test-owned dummy file only"
+      }
+    },
+    "scheme_fixed": {
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "examples/pyjwt-ssrf/reproduce.py",
+        "--repo",
+        "../pyjwt-2.13.0",
+        "--mode",
+        "fixed-scheme"
+      ],
+      "exit_code": 0,
+      "result": {
+        "file_scheme_rejected_at_construction": true,
+        "mode": "fixed-scheme",
+        "public_fixture_returned": "public JWKS fixture",
+        "public_requests": [
+          {
+            "headers": {},
+            "url": "http://public-fixture.test/jwks"
+          }
+        ],
+        "repository": "/Users/evanluo/Documents/Github/pyjwt-2.13.0"
+      }
+    },
+    "scheme_hardened": {
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "examples/pyjwt-ssrf/reproduce.py",
+        "--repo",
+        "../pyjwt-2.12.1",
+        "--mode",
+        "hardened-scheme"
+      ],
+      "exit_code": 0,
+      "result": {
+        "file_scheme_rejected": true,
+        "mode": "hardened-scheme",
+        "network": "temporary dummy file, synthetic DNS, and in-memory HTTP only",
+        "public_fixture_returned": "public JWKS fixture",
+        "public_requests": [
+          "http://public-fixture.test/jwks"
+        ],
+        "repository": "/Users/evanluo/Documents/Github/pyjwt-2.12.1"
+      }
+    }
+  }
+}
