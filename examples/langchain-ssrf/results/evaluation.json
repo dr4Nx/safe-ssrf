@@ -1,5 +1,5 @@
 {
-  "created_utc": "2026-10-20T09:55:58.430649+00:00",
+  "created_utc": "2026-10-20T10:07:00.020223+00:00",
   "python": "3.11.17 (main, Oct  1 2026, 00:48:48) [Clang 21.0.0 (clang-2100.3.34.2)]",
   "vulnerable_repository": "/Users/evanluo/Documents/Github/ssrf-study/checkout",
   "vulnerable_revision": "007c5a85d5264203ec0e0a6c44eb13b079bfb984",
@@ -18,7 +18,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 1.194,
+      "duration_seconds": 1.186,
       "log": "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/results/vulnerable_build.log"
     },
     "vulnerable_existing_tests": {
@@ -31,7 +31,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.558,
+      "duration_seconds": 0.53,
       "log": "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/results/vulnerable_existing_tests.log"
     },
     "vulnerable_release_default": {
@@ -41,7 +41,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.331,
+      "duration_seconds": 0.308,
       "log": "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/results/vulnerable_release_default.log"
     },
     "fixed_build": {
@@ -55,7 +55,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 1.001,
+      "duration_seconds": 1.01,
       "log": "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/results/fixed_build.log"
     },
     "fixed_existing_tests": {
@@ -68,7 +68,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.415,
+      "duration_seconds": 0.422,
       "log": "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/results/fixed_existing_tests.log"
     },
     "fixed_release_default": {
@@ -78,7 +78,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.312,
+      "duration_seconds": 0.316,
       "log": "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/results/fixed_release_default.log"
     },
     "ssrf_and_utility_integration": {
@@ -91,9 +91,22 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.475,
+      "duration_seconds": 0.445,
       "log": "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/results/ssrf_and_utility_integration.log"
+    },
+    "ssrf_and_utility_integration_fixed_source": {
+      "command": [
+        "/Users/evanluo/Library/Caches/pypoetry/virtualenvs/langchain-community-OHhycLXa-py3.11/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/test_web_research_integration.py"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "duration_seconds": 0.454,
+      "log": "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/results/ssrf_and_utility_integration_fixed_source.log"
     }
   },
-  "execution_time_seconds": 4.286
+  "execution_time_seconds": 4.671
 }

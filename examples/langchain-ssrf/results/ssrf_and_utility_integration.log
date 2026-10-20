@@ -7,4 +7,4 @@ safe-egress/examples/langchain-ssrf/test_web_research_integration.py::test_safe_
     warnings.warn("For better logging of progress, `pip install tqdm`")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-6 passed, 3 warnings in 0.24s
+6 passed, 3 warnings in 0.22s

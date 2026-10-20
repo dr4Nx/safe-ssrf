@@ -106,6 +106,11 @@ def main() -> int:
         [sys.executable, "-m", "pytest", "-q", str(INTEGRATION_TEST)],
         vulnerable_community, source_env(vulnerable_community), logs,
     )
+    phases["ssrf_and_utility_integration_fixed_source"] = run_phase(
+        "ssrf_and_utility_integration_fixed_source",
+        [sys.executable, "-m", "pytest", "-q", str(INTEGRATION_TEST)],
+        fixed_community, source_env(fixed_community), logs,
+    )
 
     report = {
         "created_utc": datetime.now(timezone.utc).isoformat(),

@@ -61,7 +61,7 @@ PYTHONPATH=src poetry run python examples/langchain-ssrf/run_eval.py \
   --fixed ../langchain-community-fixed-0.2.9
 ```
 
-The runner does not install packages. It records the vulnerable and fixed Git revisions, builds both wheels, runs the five focused project tests on each revision, checks the default opt-in behavior for each source tree, and runs the six fixture-only SSRF/utility tests. The latest local Python 3.11 run passed all seven phases; logs and the machine-readable report are in [`results/`](results/).
+The runner does not install packages. It records the vulnerable and fixed Git revisions, builds both wheels, runs the five focused project tests on each revision, checks the default opt-in behavior for each source tree, and runs the six fixture-only SSRF/utility tests against both source revisions. The latest local Python 3.11 run passed all eight phases; logs and the machine-readable report are in [`results/`](results/).
 
 ## Build smoke
 
