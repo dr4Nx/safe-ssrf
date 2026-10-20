@@ -22,6 +22,8 @@ test_finds_direct_calls_through_module_aliases_and_import_aliases (tests.test_au
 test_finds_direct_urllib3_pool_calls_and_aliases (tests.test_audit.SinkInventoryTests.test_finds_direct_urllib3_pool_calls_and_aliases) ... ok
 test_ignores_unrelated_methods_and_documents_heuristic_limits (tests.test_audit.SinkInventoryTests.test_ignores_unrelated_methods_and_documents_heuristic_limits) ... ok
 test_recognizes_all_safe_client_wrappers (tests.test_audit.SinkInventoryTests.test_recognizes_all_safe_client_wrappers) ... ok
+test_tracks_client_factory_returned_from_an_instance_method (tests.test_audit.SinkInventoryTests.test_tracks_client_factory_returned_from_an_instance_method) ... ok
+test_tracks_sessions_assigned_to_instance_attributes (tests.test_audit.SinkInventoryTests.test_tracks_sessions_assigned_to_instance_attributes) ... ok
 test_alternate_numeric_hosts_are_checked_after_resolution (tests.test_client.SafeFetcherTests.test_alternate_numeric_hosts_are_checked_after_resolution) ... ok
 test_dns_failure_and_empty_answers_fail_closed (tests.test_client.SafeFetcherTests.test_dns_failure_and_empty_answers_fail_closed) ... ok
 test_exact_private_host_exception_can_fetch_simulated_service (tests.test_client.SafeFetcherTests.test_exact_private_host_exception_can_fetch_simulated_service) ... ok
@@ -62,6 +64,7 @@ test_public_classifier_rejects_sensitive_and_transition_ranges (tests.test_polic
 test_rejects_invalid_ports_and_limits (tests.test_policy.FetchPolicyTests.test_rejects_invalid_ports_and_limits) ... ok
 test_normalizes_case_idna_and_ip_literals (tests.test_policy.HostNormalizationTests.test_normalizes_case_idna_and_ip_literals) ... ok
 test_rejects_empty_invalid_scoped_and_malformed_hosts (tests.test_policy.HostNormalizationTests.test_rejects_empty_invalid_scoped_and_malformed_hosts) ... ok
+test_307_redirect_preserves_post_body_through_requests (tests.test_requests_adapter.SafeRequestsSessionTests.test_307_redirect_preserves_post_body_through_requests) ... ok
 test_concurrent_per_request_policies_do_not_cross_between_calls (tests.test_requests_adapter.SafeRequestsSessionTests.test_concurrent_per_request_policies_do_not_cross_between_calls) ... ok
 test_cross_origin_redirect_removes_origin_metadata (tests.test_requests_adapter.SafeRequestsSessionTests.test_cross_origin_redirect_removes_origin_metadata) ... ok
 test_custom_mount_cannot_replace_safe_transport (tests.test_requests_adapter.SafeRequestsSessionTests.test_custom_mount_cannot_replace_safe_transport) ... ok
@@ -98,6 +101,6 @@ test_public_resource_returns_urlopen_style_buffered_response (tests.test_urllib_
 test_redirect_to_loopback_is_rejected_before_second_send (tests.test_urllib_adapter.SafeUrllibOpenerTests.test_redirect_to_loopback_is_rejected_before_second_send) ... ok
 
 ----------------------------------------------------------------------
-Ran 96 tests in 0.356s
+Ran 99 tests in 0.368s
 
 OK (skipped=1)
