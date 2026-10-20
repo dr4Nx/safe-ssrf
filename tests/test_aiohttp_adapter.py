@@ -126,6 +126,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         for options in (
             {"connector": aiohttp.TCPConnector()},
             {"trust_env": True},
+            {"auth": aiohttp.BasicAuth("dummy-user", "dummy-password")},
             {"middlewares": (lambda *args: None,)},
             {"response_class": CustomResponse},
         ):

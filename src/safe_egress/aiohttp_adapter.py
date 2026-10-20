@@ -305,8 +305,8 @@ def safe_aiohttp_session(
     ports 80 and 443. Supply a ``FetchPolicy`` to customize exact host/port
     rules. Response reads and iterators are capped at ``max_response_bytes``.
     Do not pass proxies, cookie jars, connectors, request/response classes,
-    middleware, or ``trust_env=True``. Per-request cookies and URL credentials
-    are rejected.
+    middleware, session-wide ``auth``, or ``trust_env=True``. Per-request
+    cookies and URL credentials are rejected.
 
     aiohttp's public request-class extension point rejects per-request proxies.
     Using a standard ``ClientSession`` avoids relying on its private request
@@ -318,6 +318,12 @@ def safe_aiohttp_session(
         raise ValueError("A safe aiohttp session disables trust_env")
     if kwargs.get("proxy") is not None:
         raise ValueError("A safe aiohttp session does not accept a session proxy")
+    if kwargs.get("auth") is not None:
+        # aiohttp reapplies ClientSession._default_auth at the top of each
+        # redirect iteration, including after its cross-origin branch clears
+        # the current auth value. The trace hook can remove headers but cannot
+        # prevent this constructor-level auth from being generated again.
+        raise ValueError("A safe aiohttp session does not accept session-wide auth")
     if kwargs.get("middlewares"):
         raise ValueError("A safe aiohttp session does not accept custom middleware")
     if kwargs.get("request_class", aiohttp.ClientRequest) is not aiohttp.ClientRequest:

@@ -101,6 +101,6 @@ test_public_resource_returns_urlopen_style_buffered_response (tests.test_urllib_
 test_redirect_to_loopback_is_rejected_before_second_send (tests.test_urllib_adapter.SafeUrllibOpenerTests.test_redirect_to_loopback_is_rejected_before_second_send) ... ok
 
 ----------------------------------------------------------------------
-Ran 99 tests in 0.368s
+Ran 99 tests in 0.357s
 
 OK (skipped=1)
