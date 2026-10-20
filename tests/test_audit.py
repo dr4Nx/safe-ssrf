@@ -68,6 +68,46 @@ raw_session.get(user_url)
         self.assertEqual([finding.call.rsplit(".", 1)[-1] for finding in findings], ["get", "get", "get"])
         self.assertEqual([finding.policy_bound for finding in findings], [True, True, False])
 
+    def test_tracks_sessions_assigned_to_instance_attributes(self) -> None:
+        source = """
+import requests
+from safe_egress.requests_adapter import SafeRequestsSession
+
+class Fetcher:
+    def __init__(self):
+        self.session = requests.Session()
+        self.safe = SafeRequestsSession()
+
+    def fetch(self, url):
+        self.session.get(url)
+        self.safe.post(url)
+"""
+        findings = scan_source(source, "sample.py")
+        self.assertEqual([finding.call for finding in findings], [
+            "requests.Session.get", "safe_egress.requests_adapter.SafeRequestsSession.post"
+        ])
+        self.assertEqual([finding.policy_bound for finding in findings], [False, True])
+
+    def test_tracks_client_factory_returned_from_an_instance_method(self) -> None:
+        source = """
+import requests
+
+class Fetcher:
+    def __init__(self):
+        self.session = self._create_session()
+
+    def _create_session(self):
+        session = requests.Session()
+        return session
+
+    def fetch(self, url):
+        self.session.get(url)
+"""
+        findings = scan_source(source, "sample.py")
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].call, "requests.Session.get")
+        self.assertFalse(findings[0].policy_bound)
+
     def test_recognizes_all_safe_client_wrappers(self) -> None:
         source = """
 from safe_egress import SafeFetcher

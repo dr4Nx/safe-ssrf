@@ -67,7 +67,7 @@ def _resolve_name(name: str | None, modules: dict[str, str], symbols: dict[str, 
 
 
 def _client_variables(tree: ast.Module, modules: dict[str, str], symbols: dict[str, str]) -> dict[str, str]:
-    """Track simple assignments like ``session = requests.Session()``."""
+    """Track simple client assignments, including attributes such as ``self.session``."""
     variables: dict[str, str] = {}
     safe_constructors = {
         "safe_egress.SafeFetcher",
@@ -79,6 +79,59 @@ def _client_variables(tree: ast.Module, modules: dict[str, str], symbols: dict[s
         "safe_egress.urllib3_adapter.SafeUrllib3Client",
         "safe_egress.urllib_adapter.SafeUrllibOpener",
     }
+
+    def constructor_kind(value: ast.AST) -> str | None:
+        if not isinstance(value, ast.Call):
+            return None
+        constructor = _resolve_name(_dotted_name(value.func), modules, symbols)
+        if constructor in safe_constructors:
+            return constructor
+        if constructor in {"requests.Session", "httpx.Client", "httpx.AsyncClient", "aiohttp.ClientSession"}:
+            return constructor
+        if constructor in {
+            "urllib3.PoolManager",
+            "urllib3.ProxyManager",
+            "urllib3.connectionpool.HTTPConnectionPool",
+            "urllib3.connectionpool.HTTPSConnectionPool",
+        }:
+            return constructor
+        return None
+
+    # Infer simple local factories such as ``self.session = self._create_session()``
+    # where the method returns a locally constructed HTTP client. This deliberately
+    # stays intramodule and is not general interprocedural or inheritance analysis.
+    factory_kinds: dict[str, set[str]] = {}
+    for function in (node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
+        local_clients: dict[str, str] = {}
+        for child in ast.walk(function):
+            if isinstance(child, (ast.Assign, ast.AnnAssign)):
+                value = child.value
+                targets = child.targets if isinstance(child, ast.Assign) else [child.target]
+                kind = constructor_kind(value) if value is not None else None
+                if kind:
+                    for target in targets:
+                        target_name = _dotted_name(target)
+                        if target_name:
+                            local_clients[target_name] = kind
+            elif isinstance(child, (ast.With, ast.AsyncWith)):
+                for item in child.items:
+                    kind = constructor_kind(item.context_expr)
+                    target_name = _dotted_name(item.optional_vars) if item.optional_vars else None
+                    if kind and target_name:
+                        local_clients[target_name] = kind
+        for child in ast.walk(function):
+            if not isinstance(child, ast.Return) or child.value is None:
+                continue
+            kind = constructor_kind(child.value)
+            if kind is None:
+                kind = local_clients.get(_dotted_name(child.value) or "")
+            if kind:
+                factory_kinds.setdefault(function.name, set()).add(kind)
+
+    unambiguous_factories = {
+        name: next(iter(kinds)) for name, kinds in factory_kinds.items() if len(kinds) == 1
+    }
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             targets, value = node.targets, node.value
@@ -90,35 +143,25 @@ def _client_variables(tree: ast.Module, modules: dict[str, str], symbols: dict[s
                 if isinstance(value, ast.Call):
                     constructor = _resolve_name(_dotted_name(value.func), modules, symbols)
                     if constructor in safe_constructors:
-                        for target in (item.optional_vars,):
-                            if isinstance(target, ast.Name):
-                                variables[target.id] = constructor
+                        target_name = _dotted_name(item.optional_vars) if item.optional_vars else None
+                        if target_name:
+                            variables[target_name] = constructor
             continue
         else:
             continue
         if not isinstance(value, ast.Call):
             continue
-        constructor = _resolve_name(_dotted_name(value.func), modules, symbols)
-        if constructor in safe_constructors:
-            kind = constructor
-        elif constructor == "requests.Session":
-            kind = "requests.Session"
-        elif constructor in {"httpx.Client", "httpx.AsyncClient"}:
-            kind = constructor
-        elif constructor == "aiohttp.ClientSession":
-            kind = constructor
-        elif constructor in {
-            "urllib3.PoolManager",
-            "urllib3.ProxyManager",
-            "urllib3.connectionpool.HTTPConnectionPool",
-            "urllib3.connectionpool.HTTPSConnectionPool",
-        }:
-            kind = constructor
-        else:
+        kind = constructor_kind(value)
+        if kind is None:
+            called_name = _dotted_name(value.func)
+            method_name = called_name.rsplit(".", 1)[-1] if called_name else ""
+            kind = unambiguous_factories.get(method_name)
+        if kind is None:
             continue
         for target in targets:
-            if isinstance(target, ast.Name):
-                variables[target.id] = kind
+            target_name = _dotted_name(target)
+            if target_name:
+                variables[target_name] = kind
     return variables
 
 
@@ -136,8 +179,16 @@ def scan_source(source: str, path: str = "<string>") -> list[AuditFinding]:
             continue
         parts = name.split(".")
         root = parts[0]
-        if root in client_variables and parts[-1] in _REQUEST_METHODS:
-            client = client_variables[root]
+        client_key = next(
+            (
+                ".".join(parts[:index])
+                for index in range(len(parts) - 1, 0, -1)
+                if ".".join(parts[:index]) in client_variables
+            ),
+            None,
+        )
+        if client_key and parts[-1] in _REQUEST_METHODS:
+            client = client_variables[client_key]
             policy_bound = client.startswith("safe_egress.")
             findings.append(AuditFinding(path, node.lineno, f"{client}.{parts[-1]}", policy_bound))
         elif root in {"requests", "httpx"} and parts[-1] in _REQUEST_METHODS:
