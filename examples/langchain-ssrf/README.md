@@ -53,6 +53,16 @@ The six integration tests cover the vulnerable boundary, loopback blocking in th
 
 The project’s existing `tests/unit_tests/retrievers/test_web_research.py` passed five tests on both tags in the prepared Poetry environment. These checks do not cover LangChain's full test suite or every possible application-specific fetch path.
 
+To rerun the complete local matrix and write phase logs plus a JSON report, use an environment that already has the Community test dependencies and Poetry:
+
+```sh
+PYTHONPATH=src poetry run python examples/langchain-ssrf/run_eval.py \
+  --vulnerable ../ssrf-study/checkout \
+  --fixed ../langchain-community-fixed-0.2.9
+```
+
+The runner does not install packages. It records the vulnerable and fixed Git revisions, builds both wheels, runs the five focused project tests on each revision, checks the default opt-in behavior for each source tree, and runs the six fixture-only SSRF/utility tests. The latest local Python 3.11 run passed all seven phases; logs and the machine-readable report are in [`results/`](results/).
+
 ## Build smoke
 
 Both Community source revisions also build as wheels without changing the worktrees or resolving dependencies. Run from each revision's `libs/community` directory:
