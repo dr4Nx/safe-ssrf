@@ -64,6 +64,7 @@ test_public_classifier_rejects_sensitive_and_transition_ranges (tests.test_polic
 test_rejects_invalid_ports_and_limits (tests.test_policy.FetchPolicyTests.test_rejects_invalid_ports_and_limits) ... ok
 test_normalizes_case_idna_and_ip_literals (tests.test_policy.HostNormalizationTests.test_normalizes_case_idna_and_ip_literals) ... ok
 test_rejects_empty_invalid_scoped_and_malformed_hosts (tests.test_policy.HostNormalizationTests.test_rejects_empty_invalid_scoped_and_malformed_hosts) ... ok
+test_307_redirect_preserves_post_body_through_requests (tests.test_requests_adapter.SafeRequestsSessionTests.test_307_redirect_preserves_post_body_through_requests) ... ok
 test_concurrent_per_request_policies_do_not_cross_between_calls (tests.test_requests_adapter.SafeRequestsSessionTests.test_concurrent_per_request_policies_do_not_cross_between_calls) ... ok
 test_cross_origin_redirect_removes_origin_metadata (tests.test_requests_adapter.SafeRequestsSessionTests.test_cross_origin_redirect_removes_origin_metadata) ... ok
 test_custom_mount_cannot_replace_safe_transport (tests.test_requests_adapter.SafeRequestsSessionTests.test_custom_mount_cannot_replace_safe_transport) ... ok
@@ -100,6 +101,6 @@ test_public_resource_returns_urlopen_style_buffered_response (tests.test_urllib_
 test_redirect_to_loopback_is_rejected_before_second_send (tests.test_urllib_adapter.SafeUrllibOpenerTests.test_redirect_to_loopback_is_rejected_before_second_send) ... ok
 
 ----------------------------------------------------------------------
-Ran 98 tests in 0.743s
+Ran 99 tests in 0.732s
 
 OK (skipped=20)
