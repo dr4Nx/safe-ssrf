@@ -9,6 +9,7 @@ import math
 import re
 import socket
 import ssl
+import zlib
 from typing import Mapping
 from urllib.parse import quote, urljoin, urlsplit
 
@@ -20,6 +21,88 @@ _FORBIDDEN_HEADERS = frozenset(
     {"host", "proxy-authorization", "proxy-connection", "content-length", "transfer-encoding"}
 )
 _HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+
+
+def _inflate_bounded(data: bytes, window_bits: int, limit: int) -> tuple[bytes, bytes]:
+    """Inflate one zlib/gzip member without producing more than ``limit`` bytes."""
+    decoder = zlib.decompressobj(window_bits)
+    output = bytearray()
+    pending = data
+    while True:
+        remaining = limit + 1 - len(output)
+        if remaining <= 0:
+            raise ResponseTooLargeError("Decoded response body exceeded the configured byte limit")
+        try:
+            output.extend(decoder.decompress(pending, remaining))
+        except zlib.error as exc:
+            raise FetchError("The response used an invalid content encoding") from exc
+        if len(output) > limit:
+            raise ResponseTooLargeError("Decoded response body exceeded the configured byte limit")
+        pending = decoder.unconsumed_tail
+        if not pending:
+            break
+    if not decoder.eof:
+        raise FetchError("The response contained an incomplete compressed body")
+    return bytes(output), decoder.unused_data
+
+
+def _decode_response_body(
+    body: bytes,
+    headers: tuple[tuple[str, str], ...],
+    limit: int,
+) -> tuple[bytes, tuple[tuple[str, str], ...]]:
+    """Decode supported content codings under the response size limit.
+
+    SafeFetcher requests identity encoding, but a server may still return a
+    compressed entity. Decode gzip/deflate incrementally so callers receive
+    ordinary response bytes without allowing a small compressed body to
+    expand past the configured cap.
+    """
+    codings = [
+        coding.strip().lower()
+        for name, value in headers
+        if name.lower() == "content-encoding"
+        for coding in value.split(",")
+        if coding.strip()
+    ]
+    codings = [coding for coding in codings if coding != "identity"]
+    if not codings:
+        return body, headers
+    if any(coding not in {"gzip", "x-gzip", "deflate"} for coding in codings):
+        raise PolicyError("The response used an unsupported content encoding")
+
+    decoded = body
+    for coding in reversed(codings):
+        if coding in {"gzip", "x-gzip"}:
+            remaining = decoded
+            members = bytearray()
+            while remaining:
+                member, remaining = _inflate_bounded(remaining, zlib.MAX_WBITS | 16, limit - len(members))
+                members.extend(member)
+                if len(members) > limit:
+                    raise ResponseTooLargeError("Decoded response body exceeded the configured byte limit")
+            decoded = bytes(members)
+        else:
+            try:
+                decoded, trailing = _inflate_bounded(decoded, zlib.MAX_WBITS, limit)
+            except ResponseTooLargeError:
+                raise
+            except FetchError:
+                # Some servers emit raw DEFLATE despite the HTTP deflate
+                # coding's zlib-wrapped format. Accept it only if it forms a
+                # complete stream and remains within the same output limit.
+                decoded, trailing = _inflate_bounded(decoded, -zlib.MAX_WBITS, limit)
+            if trailing:
+                raise FetchError("The response contained trailing compressed data")
+        if len(decoded) > limit:
+            raise ResponseTooLargeError("Decoded response body exceeded the configured byte limit")
+
+    decoded_headers = tuple(
+        (name, value)
+        for name, value in headers
+        if name.lower() not in {"content-encoding", "content-length"}
+    ) + (("Content-Length", str(len(decoded))),)
+    return decoded, decoded_headers
 
 
 @dataclass(frozen=True, slots=True)
@@ -336,9 +419,11 @@ class SafeFetcher:
             body = response.read(max_response_bytes + 1)
             if len(body) > max_response_bytes:
                 raise ResponseTooLargeError("Response body exceeded the configured byte limit")
+            headers = tuple(response.getheaders())
+            body, headers = _decode_response_body(body, headers, max_response_bytes)
             return FetchResponse(
                 status_code=response.status,
-                headers=tuple(response.getheaders()),
+                headers=headers,
                 content=body,
                 url=target.url,
                 history=(),

@@ -168,7 +168,7 @@ These adapters do not patch process-wide functions. Requests, HTTPX, urllib3, an
 - The default port policy is intentionally limited to 80 and 443. Add other ports only when the feature needs them.
 - DNS policy depends on the host OS resolver. All returned addresses are checked, then the selected numeric IP is used for the socket, avoiding a second hostname lookup for that connection.
 - The classifier rejects IPv4-mapped IPv6, 6to4, Teredo, and the well-known NAT64 prefixes. It cannot identify every organization-specific translation or routing rule.
-- Response bodies are buffered up to a configured limit. The timeout applies to socket operations, not a strict end-to-end deadline.
+- Response bodies are buffered up to a configured decoded-byte limit. Unexpected gzip and deflate responses are decoded under that cap; unsupported content encodings fail closed. The timeout applies to socket operations, not a strict end-to-end deadline.
 - See [the threat model and test plan](docs/threat-model.md) for the tested behaviors and remaining boundaries.
 
 ## CVE reproductions

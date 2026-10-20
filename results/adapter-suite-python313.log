@@ -5,6 +5,7 @@ test_explicit_zero_port_is_not_treated_as_default_http_port (tests.test_aiohttp_
 test_ip_literal_policy_is_checked_before_aiohttp_connector (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_ip_literal_policy_is_checked_before_aiohttp_connector) ... skipped 'install safe-egress[aiohttp] to run aiohttp adapter tests'
 test_loopback_literal_is_rejected_without_dns (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_loopback_literal_is_rejected_without_dns) ... skipped 'install safe-egress[aiohttp] to run aiohttp adapter tests'
 test_mixed_public_and_loopback_dns_results_are_rejected (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_mixed_public_and_loopback_dns_results_are_rejected) ... skipped 'install safe-egress[aiohttp] to run aiohttp adapter tests'
+test_per_request_basic_auth_does_not_cross_origin_redirect (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_per_request_basic_auth_does_not_cross_origin_redirect) ... skipped 'install safe-egress[aiohttp] to run aiohttp adapter tests'
 test_public_destination_is_returned_as_numeric_address (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_public_destination_is_returned_as_numeric_address) ... skipped 'install safe-egress[aiohttp] to run aiohttp adapter tests'
 test_rejects_disallowed_ports_and_proxy_options (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_rejects_disallowed_ports_and_proxy_options) ... skipped 'install safe-egress[aiohttp] to run aiohttp adapter tests'
 test_session_allows_public_request_through_policy_resolver (tests.test_aiohttp_adapter.SafeAiohttpResolverTests.test_session_allows_public_request_through_policy_resolver) ... skipped 'install safe-egress[aiohttp] to run aiohttp adapter tests'
@@ -27,6 +28,8 @@ test_tracks_sessions_assigned_to_instance_attributes (tests.test_audit.SinkInven
 test_alternate_numeric_hosts_are_checked_after_resolution (tests.test_client.SafeFetcherTests.test_alternate_numeric_hosts_are_checked_after_resolution) ... ok
 test_dns_failure_and_empty_answers_fail_closed (tests.test_client.SafeFetcherTests.test_dns_failure_and_empty_answers_fail_closed) ... ok
 test_exact_private_host_exception_can_fetch_simulated_service (tests.test_client.SafeFetcherTests.test_exact_private_host_exception_can_fetch_simulated_service) ... ok
+test_gzip_expansion_cannot_exceed_response_body_limit (tests.test_client.SafeFetcherTests.test_gzip_expansion_cannot_exceed_response_body_limit) ... ok
+test_gzip_response_is_decoded_with_a_bounded_output (tests.test_client.SafeFetcherTests.test_gzip_response_is_decoded_with_a_bounded_output) ... ok
 test_headers_cannot_override_host_or_proxy_routing (tests.test_client.SafeFetcherTests.test_headers_cannot_override_host_or_proxy_routing) ... ok
 test_https_connection_keeps_original_hostname_for_tls (tests.test_client.SafeFetcherTests.test_https_connection_keeps_original_hostname_for_tls) ... ok
 test_loopback_target_is_rejected_before_transport_is_called (tests.test_client.SafeFetcherTests.test_loopback_target_is_rejected_before_transport_is_called) ... ok
@@ -89,6 +92,8 @@ test_module_level_get_keeps_common_requests_behavior (tests.test_requests_compat
 test_module_level_request_accepts_explicit_policy_and_rejects_proxy (tests.test_requests_compat.RequestsCompatibilityTests.test_module_level_request_accepts_explicit_policy_and_rejects_proxy) ... ok
 test_session_alias_uses_safe_session_and_private_default_fails_closed (tests.test_requests_compat.RequestsCompatibilityTests.test_session_alias_uses_safe_session_and_private_default_fails_closed) ... ok
 test_checked_address_is_used_for_real_loopback_socket (tests.test_socket_integration.SocketIntegrationTests.test_checked_address_is_used_for_real_loopback_socket) ... skipped 'this environment does not permit loopback binds: [Errno 1] Operation not permitted'
+test_compressed_expansion_over_policy_limit_is_rejected (tests.test_urllib3_adapter.SafeUrllib3ClientTests.test_compressed_expansion_over_policy_limit_is_rejected) ... ok
+test_compressed_response_is_decoded_under_policy_limit (tests.test_urllib3_adapter.SafeUrllib3ClientTests.test_compressed_response_is_decoded_under_policy_limit) ... ok
 test_json_body_and_policy_supported_request_options (tests.test_urllib3_adapter.SafeUrllib3ClientTests.test_json_body_and_policy_supported_request_options) ... ok
 test_public_resource_request_returns_urllib3_response (tests.test_urllib3_adapter.SafeUrllib3ClientTests.test_public_resource_request_returns_urllib3_response) ... ok
 test_redirect_to_loopback_is_rejected_before_second_send (tests.test_urllib3_adapter.SafeUrllib3ClientTests.test_redirect_to_loopback_is_rejected_before_second_send) ... ok
@@ -101,6 +106,6 @@ test_public_resource_returns_urlopen_style_buffered_response (tests.test_urllib_
 test_redirect_to_loopback_is_rejected_before_second_send (tests.test_urllib_adapter.SafeUrllibOpenerTests.test_redirect_to_loopback_is_rejected_before_second_send) ... ok
 
 ----------------------------------------------------------------------
-Ran 99 tests in 0.732s
+Ran 104 tests in 0.787s
 
-OK (skipped=20)
+OK (skipped=21)

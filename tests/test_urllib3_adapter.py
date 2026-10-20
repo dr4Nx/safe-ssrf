@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import gzip
 import ipaddress
 import json
 import socket
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 try:
     import urllib3
@@ -45,6 +46,50 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         self.assertEqual(response.data, b"PUBLIC_FIXTURE_CONTENT")
         self.assertEqual(response.headers.getlist("X-Fixture"), ["one", "two"])
         self.assertEqual(response.geturl(), "https://public.example/resource")
+
+    def test_compressed_response_is_decoded_under_policy_limit(self) -> None:
+        from safe_egress.urllib3_adapter import SafeUrllib3Client
+
+        client = SafeUrllib3Client(policy=FetchPolicy(max_response_bytes=1024))
+        compressed = gzip.compress(b"PUBLIC_GZIP_FIXTURE")
+        fake_response = Mock(status=200)
+        fake_response.read.return_value = compressed
+        fake_response.getheaders.return_value = [
+            ("Content-Encoding", "gzip"),
+            ("Content-Length", str(len(compressed))),
+        ]
+        connection = Mock()
+        connection.getresponse.return_value = fake_response
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 80))]
+
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch(
+            "safe_egress.client._PinnedHTTPConnection", return_value=connection
+        ):
+            response = client.request("GET", "http://public.example/resource")
+
+        self.assertEqual(response.data, b"PUBLIC_GZIP_FIXTURE")
+        self.assertIsNone(response.headers.get("Content-Encoding"))
+        self.assertEqual(response.headers.get("Content-Length"), str(len(response.data)))
+
+    def test_compressed_expansion_over_policy_limit_is_rejected(self) -> None:
+        from safe_egress.urllib3_adapter import SafeUrllib3Client, SafeUrllib3Error
+
+        client = SafeUrllib3Client(policy=FetchPolicy(max_response_bytes=1024))
+        compressed = gzip.compress(b"A" * 100_000)
+        self.assertLess(len(compressed), 1024)
+        fake_response = Mock(status=200)
+        fake_response.read.return_value = compressed
+        fake_response.getheaders.return_value = [("Content-Encoding", "gzip")]
+        connection = Mock()
+        connection.getresponse.return_value = fake_response
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 80))]
+
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch(
+            "safe_egress.client._PinnedHTTPConnection", return_value=connection
+        ):
+            with self.assertRaises(SafeUrllib3Error):
+                client.request("GET", "http://public.example/resource")
+        connection.close.assert_called_once()
 
     def test_redirect_to_loopback_is_rejected_before_second_send(self) -> None:
         from safe_egress.urllib3_adapter import SafeUrllib3Client, SafeUrllib3Error

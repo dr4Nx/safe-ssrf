@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import ipaddress
 import socket
 import unittest
@@ -288,6 +289,41 @@ class SafeFetcherTests(unittest.TestCase):
         with patch("safe_egress.client._PinnedHTTPConnection", return_value=connection):
             with self.assertRaises(ResponseTooLargeError):
                 fetcher._send(SafeFetcher._parse_target("http://example.test/"), PUBLIC_IP, {})
+        connection.close.assert_called_once()
+
+    def test_gzip_response_is_decoded_with_a_bounded_output(self) -> None:
+        fetcher = SafeFetcher(FetchPolicy(max_response_bytes=1024))
+        compressed = gzip.compress(b"public fixture content")
+        fake_response = Mock(status=200)
+        fake_response.read.return_value = compressed
+        fake_response.getheaders.return_value = [
+            ("Content-Encoding", "gzip"),
+            ("Content-Length", str(len(compressed))),
+            ("Content-Type", "text/plain"),
+        ]
+        connection = Mock()
+        connection.getresponse.return_value = fake_response
+
+        with patch("safe_egress.client._PinnedHTTPConnection", return_value=connection):
+            result = fetcher._send(SafeFetcher._parse_target("http://public.example/"), PUBLIC_IP, {})
+
+        self.assertEqual(result.content, b"public fixture content")
+        self.assertNotIn("Content-Encoding", {name for name, _value in result.headers})
+        self.assertIn(("Content-Length", str(len(result.content))), result.headers)
+
+    def test_gzip_expansion_cannot_exceed_response_body_limit(self) -> None:
+        fetcher = SafeFetcher(FetchPolicy(max_response_bytes=1024))
+        compressed = gzip.compress(b"A" * 100_000)
+        self.assertLess(len(compressed), 1024)
+        fake_response = Mock(status=200)
+        fake_response.read.return_value = compressed
+        fake_response.getheaders.return_value = [("Content-Encoding", "gzip")]
+        connection = Mock()
+        connection.getresponse.return_value = fake_response
+
+        with patch("safe_egress.client._PinnedHTTPConnection", return_value=connection):
+            with self.assertRaises(ResponseTooLargeError):
+                fetcher._send(SafeFetcher._parse_target("http://public.example/"), PUBLIC_IP, {})
         connection.close.assert_called_once()
 
     def test_headers_cannot_override_host_or_proxy_routing(self) -> None:
