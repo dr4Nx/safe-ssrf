@@ -35,7 +35,7 @@ The current `allowed_private_hosts` setting is a deliberate full-trust exception
 
 ## Automated local validation
 
-Run `PYTHONPATH=src python -m unittest discover -v`. Install the optional client extras to run their adapter tests (`python -m pip install '.[requests,httpx,aiohttp]'`). The suite uses controlled resolver records and in-memory simulated services. It does not bind sockets, contact public hosts, or contact real internal services.
+Run `PYTHONPATH=src python -m unittest discover -v`. Install the optional client extras to run their adapter tests (`python -m pip install '.[requests,httpx,aiohttp]'`). Most tests use controlled resolver records and in-memory simulated services. One optional integration test binds an ephemeral loopback listener when the environment permits it; no test contacts public hosts or real internal services.
 
 1. Direct loopback, private IPv4/IPv6, link-local, metadata, shared-address, reserved, mapped, and transition addresses are rejected before the fixture receives a connection.
 2. A test-only exact private-host exception reaches only its configured local fixture.
