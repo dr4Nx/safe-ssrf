@@ -51,6 +51,16 @@ The harness imports the real retriever and vulnerable loader source. It intercep
 
 The six integration tests cover the vulnerable boundary, loopback blocking in the hardened aiohttp and Requests paths, and successful public-fixture indexing. The original checkout is not modified; the hardened loader is an isolated companion, not a patch to LangChain's installed loader.
 
+For a direct side-by-side demonstration, [`vulnerable_async_html.py`](vulnerable_async_html.py) contains a local copy of the vulnerable 0.2.7 `_fetch()` method. `SafeAsyncHtmlLoader` in [`hardened_async_html.py`](hardened_async_html.py) inherits the same initializer and method body, changing the session line from `aiohttp.ClientSession(...)` to `safe_aiohttp_session()`. The default policy rejects private addresses. Run the loaders and print their outcomes with:
+
+```sh
+(cd ../ssrf-study/checkout/libs/community && \
+  PYTHONPATH=../../../../safe-egress/src:../../../../safe-egress/examples/langchain-ssrf \
+  poetry run python ../../../../safe-egress/examples/langchain-ssrf/demo_loaders.py)
+```
+
+The vulnerable request is intercepted and returns dummy HTML; the guarded loader rejects loopback before the connector opens. The demo replaces HTML parsing with a tiny stub so the comparison does not depend on BeautifulSoup. `SafeWebResearchAsyncHtmlLoader` is the fuller companion used by the integration checks; it also replaces the synchronous Requests helper. Neither version modifies the LangChain checkout.
+
 The project’s existing `tests/unit_tests/retrievers/test_web_research.py` passed five tests on both tags in the prepared Poetry environment. Inspection shows these five tests cover only `QuestionListOutputParser`; they do not exercise `WebResearchRetriever`, `AsyncHtmlLoader`, or network fetching. They do not cover LangChain's full test suite or every possible application-specific fetch path.
 
 To rerun the complete local matrix and write phase results plus a JSON report, use an environment that already has the Community test dependencies and Poetry:

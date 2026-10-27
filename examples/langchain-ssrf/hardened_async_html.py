@@ -23,11 +23,52 @@ logger = logging.getLogger(__name__)
 
 
 class SafeAsyncHtmlLoader(AsyncHtmlLoader):
+    """One-line fetch-boundary replacement for the vulnerable demonstration.
+
+    It inherits LangChain's initializer unchanged. The synchronous Requests
+    helper remains the upstream implementation, so use
+    SafeWebResearchAsyncHtmlLoader below when that path is part of the flow.
+    """
+
+    async def _fetch(
+        self, url: str, retries: int = 3, cooldown: int = 2, backoff: float = 1.5
+    ) -> str:
+        async with safe_aiohttp_session() as session:
+            for i in range(retries):
+                try:
+                    async with session.get(
+                        url,
+                        headers=self.session.headers,
+                        ssl=None if self.session.verify else False,
+                        **self.requests_kwargs,
+                    ) as response:
+                        try:
+                            text = await response.text()
+                        except UnicodeDecodeError:
+                            logger.error(f"Failed to decode content from {url}")
+                            text = ""
+                        return text
+                except (aiohttp.ClientConnectionError, TimeoutError) as exc:
+                    if i == retries - 1 and self.ignore_load_errors:
+                        logger.warning(f"Error fetching {url} after {retries} retries.")
+                        return ""
+                    elif i == retries - 1:
+                        raise
+                    else:
+                        logger.warning(
+                            f"Error fetching {url} with attempt "
+                            f"{i + 1}/{retries}: {exc}. Retrying..."
+                        )
+                        await asyncio.sleep(cooldown * backoff**i)
+        raise ValueError("retry count exceeded")
+
+
+class SafeWebResearchAsyncHtmlLoader(AsyncHtmlLoader):
     """AsyncHtmlLoader whose URL fetches use the safe aiohttp session."""
 
     def __init__(self, *args: Any, policy: FetchPolicy | None = None, **kwargs: Any) -> None:
         if kwargs.get("proxies"):
-            raise PolicyError("SafeAsyncHtmlLoader does not support proxies")
+            raise PolicyError("SafeWebResearchAsyncHtmlLoader does not support proxies")
         kwargs["proxies"] = None
         kwargs["trust_env"] = False
         selected_policy = policy or FetchPolicy()

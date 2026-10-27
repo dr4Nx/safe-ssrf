@@ -20,7 +20,7 @@ import pytest
 from safe_egress import FetchPolicy, FetchResponse, SafeFetcher
 from langchain_community.retrievers.web_research import WebResearchRetriever
 
-from hardened_async_html import SafeAsyncHtmlLoader
+from hardened_async_html import SafeWebResearchAsyncHtmlLoader
 
 
 INTERNAL_URL = "http://127.0.0.1:8080/internal-status"
@@ -219,7 +219,7 @@ def test_safe_aiohttp_session_blocks_internal_search_result_before_connector() -
     retriever = _retriever("http://127.0.0.1/internal-status")
     connector_attempt = AsyncMock()
     with (
-        patch("langchain_community.retrievers.web_research.AsyncHtmlLoader", SafeAsyncHtmlLoader),
+        patch("langchain_community.retrievers.web_research.AsyncHtmlLoader", SafeWebResearchAsyncHtmlLoader),
         patch.object(aiohttp.TCPConnector, "_create_connection", new=connector_attempt),
         patch(
             "langchain_community.document_loaders.async_html.AsyncHtmlLoader._to_document",
@@ -236,7 +236,7 @@ def test_safe_companion_loader_guards_its_requests_helper_too() -> None:
     """The loader's synchronous Requests helper cannot bypass its policy."""
     import requests
 
-    loader = SafeAsyncHtmlLoader(
+    loader = SafeWebResearchAsyncHtmlLoader(
         INTERNAL_URL,
         ignore_load_errors=False,
         policy=FetchPolicy(allowed_ports=frozenset({8080})),
@@ -286,7 +286,7 @@ def test_safe_aiohttp_loader_preserves_public_fetch_in_retriever_flow() -> None:
         return transport, protocol
 
     with (
-        patch("langchain_community.retrievers.web_research.AsyncHtmlLoader", SafeAsyncHtmlLoader),
+        patch("langchain_community.retrievers.web_research.AsyncHtmlLoader", SafeWebResearchAsyncHtmlLoader),
         patch.object(asyncio.BaseEventLoop, "getaddrinfo", new=fake_getaddrinfo),
         patch.object(aiohttp.TCPConnector, "_wrap_create_connection", new=in_memory_connection),
         patch(
