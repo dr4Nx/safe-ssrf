@@ -1,5 +1,5 @@
 {
-  "created_utc": "2026-10-20T10:04:49.408404+00:00",
+  "created_utc": "2026-10-20T11:54:00.622443+00:00",
   "python": "3.11.17 (main, Oct  1 2026, 00:48:48) [Clang 21.0.0 (clang-2100.3.34.2)]",
   "revisions": {
     "vulnerable_redirect": {
@@ -31,8 +31,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 4.415,
-      "log": "/Users/evanluo/Documents/Github/safe-egress/examples/pyjwt-ssrf/results/vulnerable_redirect_existing_tests.log"
+      "duration_seconds": 4.436
     },
     "fixed_redirect_existing_tests": {
       "command": [
@@ -46,8 +45,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 4.427,
-      "log": "/Users/evanluo/Documents/Github/safe-egress/examples/pyjwt-ssrf/results/fixed_redirect_existing_tests.log"
+      "duration_seconds": 4.441
     },
     "redirect_vulnerable": {
       "command": [
@@ -60,8 +58,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.091,
-      "log": "/Users/evanluo/Documents/Github/safe-egress/examples/pyjwt-ssrf/results/redirect_vulnerable.log"
+      "duration_seconds": 0.092
     },
     "redirect_fixed": {
       "command": [
@@ -74,8 +71,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.099,
-      "log": "/Users/evanluo/Documents/Github/safe-egress/examples/pyjwt-ssrf/results/redirect_fixed.log"
+      "duration_seconds": 0.106
     },
     "redirect_hardened": {
       "command": [
@@ -88,8 +84,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.105,
-      "log": "/Users/evanluo/Documents/Github/safe-egress/examples/pyjwt-ssrf/results/redirect_hardened.log"
+      "duration_seconds": 0.104
     },
     "scheme_vulnerable": {
       "command": [
@@ -102,8 +97,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.09,
-      "log": "/Users/evanluo/Documents/Github/safe-egress/examples/pyjwt-ssrf/results/scheme_vulnerable.log"
+      "duration_seconds": 0.093
     },
     "scheme_fixed": {
       "command": [
@@ -116,8 +110,7 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.087,
-      "log": "/Users/evanluo/Documents/Github/safe-egress/examples/pyjwt-ssrf/results/scheme_fixed.log"
+      "duration_seconds": 0.091
     },
     "scheme_hardened": {
       "command": [
@@ -130,9 +123,8 @@
       ],
       "exit_code": 0,
       "status": "passed",
-      "duration_seconds": 0.1,
-      "log": "/Users/evanluo/Documents/Github/safe-egress/examples/pyjwt-ssrf/results/scheme_hardened.log"
+      "duration_seconds": 0.103
     }
   },
-  "execution_time_seconds": 9.414
+  "execution_time_seconds": 9.466
 }

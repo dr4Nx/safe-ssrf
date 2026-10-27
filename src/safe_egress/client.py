@@ -9,6 +9,7 @@ import math
 import re
 import socket
 import ssl
+import time
 import zlib
 from typing import Mapping
 from urllib.parse import quote, urljoin, urlsplit
@@ -21,6 +22,10 @@ _FORBIDDEN_HEADERS = frozenset(
     {"host", "proxy-authorization", "proxy-connection", "content-length", "transfer-encoding"}
 )
 _HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+_NUMERIC_IPV4_COMPONENT = r"(?:[0-9]+|0[xX][0-9a-fA-F]+)"
+_NONCANONICAL_IPV4_HOST = re.compile(
+    rf"^{_NUMERIC_IPV4_COMPONENT}(?:\.{_NUMERIC_IPV4_COMPONENT}){{0,3}}$"
+)
 
 
 def _inflate_bounded(data: bytes, window_bits: int, limit: int) -> tuple[bytes, bytes]:
@@ -123,6 +128,7 @@ class FetchResponse:
     url: str
     history: tuple[str, ...]
     method: str = "GET"
+    peer_ip: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +140,28 @@ class _Target:
     host: str
     port: int
     request_target: str
+
+    @property
+    def origin(self) -> tuple[str, str, int]:
+        return (self.scheme, self.host, self.port)
+
+
+@dataclass(frozen=True, slots=True)
+class ValidatedDestination:
+    """One parsed HTTP(S) destination and every approved numeric address.
+
+    Transport adapters can use this result to pin a non-SafeFetcher client to
+    the checked addresses. They must connect to one of ``addresses`` directly;
+    using ``url`` with a client that resolves the hostname again reopens the
+    DNS-rebinding race.
+    """
+
+    url: str
+    scheme: str
+    host: str
+    port: int
+    request_target: str
+    addresses: tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]
 
     @property
     def origin(self) -> tuple[str, str, int]:
@@ -201,6 +229,10 @@ class _PinnedHTTPSConnection(_PinnedSocketMixin, http.client.HTTPSConnection):
         self._create_connection = self._create_pinned_connection
 
 
+class _ConnectionAttemptError(Exception):
+    """A connection failed before the HTTP request was written."""
+
+
 class SafeFetcher:
     """Fetch HTTP(S) URLs after validating and pinning their destinations.
 
@@ -229,6 +261,42 @@ class SafeFetcher:
     ) -> FetchResponse:
         """Fetch ``url`` with policy checks before every connection."""
         return self.request("GET", url, headers=headers, policy=policy)
+
+    def validate_destination(
+        self,
+        url: str,
+        *,
+        policy: FetchPolicy | None = None,
+    ) -> ValidatedDestination:
+        """Parse and authorize a URL before another transport connects.
+
+        Every DNS answer is checked and returned as a numeric address. A
+        caller that uses another HTTP client must pin its connection to the
+        returned address rather than ask that client to resolve ``url`` again.
+        This method does not open a connection or follow redirects.
+        """
+        active_policy = self.policy if policy is None else policy
+        if not isinstance(active_policy, FetchPolicy):
+            raise PolicyError("policy must be a FetchPolicy")
+        target = self._parse_target(url)
+        active_policy.check_port(target.port)
+        normalized_host = active_policy.check_host(target.host)
+        if active_policy is self.policy:
+            addresses = self._resolve_and_check(normalized_host, target.port)
+        else:
+            addresses = self._resolve_and_check(
+                normalized_host,
+                target.port,
+                policy=active_policy,
+            )
+        return ValidatedDestination(
+            url=target.url,
+            scheme=target.scheme,
+            host=normalized_host,
+            port=target.port,
+            request_target=target.request_target,
+            addresses=addresses,
+        )
 
     def request(
         self,
@@ -260,6 +328,7 @@ class SafeFetcher:
         if timeout_seconds is not None and (not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
             raise PolicyError("Request timeout must be a positive finite number")
         effective_timeout = min(active_policy.timeout_seconds, timeout_seconds or active_policy.timeout_seconds)
+        policy_options = {} if active_policy is self.policy else {"policy": active_policy}
         request_headers = self._prepare_headers(headers or {})
         current_url = url
         history: list[str] = []
@@ -269,27 +338,48 @@ class SafeFetcher:
         for redirect_count in range(active_policy.max_redirects + 1):
             # Parse and authorize each hop independently; never assume the
             # redirect target has the same safety properties as the first URL.
-            target = self._parse_target(current_url)
-            active_policy.check_port(target.port)
-            normalized_host = active_policy.check_host(target.host)
+            target = self.validate_destination(current_url, policy=active_policy)
             if previous_origin is not None and target.origin != previous_origin:
                 # Do not forward credentials or origin metadata to a different
                 # host/scheme/port named by a redirect response.
-                request_headers = self._strip_origin_credentials(request_headers)
+                request_headers = self._strip_origin_credentials(request_headers, active_policy)
 
-            # Validate all DNS answers, then pass a validated numeric address
-            # into _send so the TCP layer cannot perform a second DNS lookup.
-            policy_options = {} if active_policy is self.policy else {"policy": active_policy}
-            addresses = self._resolve_and_check(normalized_host, target.port, **policy_options)
-            response = self._send(
-                target,
-                addresses[0],
-                request_headers,
-                method=method,
-                body=current_body,
-                timeout_seconds=effective_timeout,
-                **policy_options,
-            )
+            # validate_destination checks all DNS answers; _send receives a
+            # checked numeric address so the TCP layer cannot resolve again.
+            addresses = target.addresses
+            response = None
+            selected_address = None
+            connection_error: _ConnectionAttemptError | None = None
+            connect_deadline = time.monotonic() + effective_timeout
+            attempted_connection = False
+            for address in addresses:
+                connect_timeout = connect_deadline - time.monotonic()
+                if connect_timeout <= 0:
+                    break
+                connect_options = (
+                    {"connect_timeout_seconds": connect_timeout}
+                    if attempted_connection
+                    else {}
+                )
+                try:
+                    response = self._send(
+                        target,
+                        address,
+                        request_headers,
+                        method=method,
+                        body=current_body,
+                        timeout_seconds=effective_timeout,
+                        **connect_options,
+                        **policy_options,
+                    )
+                except _ConnectionAttemptError as exc:
+                    connection_error = exc
+                    attempted_connection = True
+                    continue
+                selected_address = address
+                break
+            if response is None or selected_address is None:
+                raise FetchError("Could not connect to any approved destination address") from connection_error
             location = self._header(response.headers, "location")
             if response.status_code not in _REDIRECT_STATUSES or location is None or not follow_redirects:
                 return FetchResponse(
@@ -299,6 +389,7 @@ class SafeFetcher:
                     url=target.url,
                     history=tuple(history),
                     method=method,
+                    peer_ip=str(selected_address),
                 )
             if redirect_count >= active_policy.max_redirects:
                 raise RedirectLimitError("The response exceeded the configured redirect limit")
@@ -348,6 +439,11 @@ class SafeFetcher:
             if raw_host is None:
                 raise PolicyError("A host is required")
             host = normalize_host(raw_host)
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                if _NONCANONICAL_IPV4_HOST.fullmatch(host):
+                    raise PolicyError("Non-canonical numeric IP address is not accepted")
             explicit_port = parsed.port
             port = explicit_port if explicit_port is not None else (443 if scheme == "https" else 80)
         except ValueError as exc:
@@ -389,25 +485,32 @@ class SafeFetcher:
                 raise PolicyError("Hostname resolved to no usable addresses")
 
         active_policy = self.policy if policy is None else policy
-        private_override = active_policy.permits_private(host)
-        if not private_override and any(not active_policy.is_public_address(address) for address in addresses):
+        if any(
+            not active_policy.permits_address(address) for address in addresses
+        ):
             raise PolicyError("Hostname resolved to a non-public address")
         return addresses
 
     def _send(
         self,
-        target: _Target,
+        target: ValidatedDestination,
         address: ipaddress.IPv4Address | ipaddress.IPv6Address,
         headers: Mapping[str, str],
         *,
         method: str = "GET",
         body: bytes | None = None,
         timeout_seconds: float | None = None,
+        connect_timeout_seconds: float | None = None,
         policy: FetchPolicy | None = None,
     ) -> FetchResponse:
         """Open one connection to the approved IP and read a bounded response."""
         connection_type = _PinnedHTTPSConnection if target.scheme == "https" else _PinnedHTTPConnection
         timeout = timeout_seconds or self.policy.timeout_seconds
+        connect_timeout = timeout
+        if connect_timeout_seconds is not None:
+            if not math.isfinite(connect_timeout_seconds) or connect_timeout_seconds <= 0:
+                raise PolicyError("Connection timeout must be a positive finite number")
+            connect_timeout = min(timeout, connect_timeout_seconds)
         if target.scheme == "https":
             connection = connection_type(
                 target.host, target.port, address, timeout, self._ssl_context
@@ -415,6 +518,16 @@ class SafeFetcher:
         else:
             connection = connection_type(target.host, target.port, address, timeout)
         try:
+            try:
+                # Connect separately so another already-validated address can
+                # be tried only when no HTTP request bytes could have been sent.
+                connection.timeout = connect_timeout
+                connection.connect()
+            except (OSError, http.client.HTTPException, ssl.SSLError) as exc:
+                raise _ConnectionAttemptError("Connection to the approved address failed") from exc
+            if connection.sock is not None:
+                connection.sock.settimeout(timeout)
+            connection.timeout = timeout
             connection.request(method, target.request_target, body=body, headers=dict(headers))
             response = connection.getresponse()
             # Read one byte above the limit so an oversized response can be
@@ -473,9 +586,11 @@ class SafeFetcher:
         return prepared
 
     @staticmethod
-    def _strip_origin_credentials(headers: Mapping[str, str]) -> dict[str, str]:
+    def _strip_origin_credentials(
+        headers: Mapping[str, str], policy: FetchPolicy
+    ) -> dict[str, str]:
         """Remove headers that should not cross to a redirected origin."""
-        denied = {"authorization", "cookie", "origin"}
+        denied = policy.redirect_sensitive_headers
         return {name: value for name, value in headers.items() if name.lower() not in denied}
 
     @staticmethod

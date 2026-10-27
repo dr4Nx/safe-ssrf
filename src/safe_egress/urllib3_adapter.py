@@ -45,6 +45,7 @@ class SafeUrllib3Client:
         body = kwargs.pop("body", None)
         headers = kwargs.pop("headers", None)
         json_body = kwargs.pop("json", None)
+        policy = kwargs.pop("policy", None)
         redirect = kwargs.pop("redirect", True)
         timeout = kwargs.pop("timeout", None)
         preload_content = kwargs.pop("preload_content", True)
@@ -59,6 +60,9 @@ class SafeUrllib3Client:
             raise PolicyError("Streaming urllib3 responses are unsupported")
         if not isinstance(decode_content, bool):
             raise PolicyError("decode_content must be a boolean")
+        if policy is not None and not isinstance(policy, FetchPolicy):
+            raise PolicyError("policy must be a FetchPolicy")
+        active_policy = self.fetcher.policy if policy is None else policy
         if json_body is not None:
             if body is not None:
                 raise PolicyError("Pass either body or json, not both")
@@ -67,7 +71,7 @@ class SafeUrllib3Client:
             if not any(name.lower() == "content-type" for name in headers):
                 headers["Content-Type"] = "application/json"
 
-        request_body = self._body_bytes(body)
+        request_body = self._body_bytes(body, active_policy.max_request_bytes)
         timeout_seconds = self._timeout_seconds(timeout)
         try:
             result = self.fetcher.request(
@@ -77,6 +81,7 @@ class SafeUrllib3Client:
                 body=request_body,
                 timeout_seconds=timeout_seconds,
                 follow_redirects=redirect,
+                policy=policy,
             )
         except FetchError as exc:
             raise SafeUrllib3Error(str(exc)) from exc
@@ -95,10 +100,10 @@ class SafeUrllib3Client:
             request_url=result.url,
         )
 
-    def _body_bytes(self, body: Any) -> bytes | None:
+    def _body_bytes(self, body: Any, limit: int | None = None) -> bytes | None:
         if body is None:
             return None
-        limit = self.fetcher.policy.max_request_bytes
+        limit = self.fetcher.policy.max_request_bytes if limit is None else limit
         if isinstance(body, bytes):
             result = body
         elif isinstance(body, str):

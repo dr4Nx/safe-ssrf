@@ -64,6 +64,48 @@ class SafeUrllibOpenerTests(unittest.TestCase):
 
         self.assertEqual(sent, ["https://public.example/start"])
 
+    def test_cross_origin_redirect_strips_configured_secret_headers(self) -> None:
+        policy = FetchPolicy(additional_sensitive_headers=frozenset({"X-Company-Secret"}))
+        opener = SafeUrllibOpener(policy=policy)
+        sent: list[tuple[str, dict[str, str]]] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, body, timeout_seconds
+            sent.append((target.url, {name.lower(): value for name, value in headers.items()}))
+            if target.host == "public.example":
+                return FetchResponse(
+                    302,
+                    (("Location", "https://other.example/next"),),
+                    b"",
+                    target.url,
+                    (),
+                    method,
+                )
+            return FetchResponse(200, (), b"PUBLIC_FIXTURE_CONTENT", target.url, (), method)
+
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 443))]
+        request = urllib.request.Request(
+            "https://public.example/start",
+            headers={
+                "X-API-Key": "dummy-api-key",
+                "X-Aws-Ec2-Metadata-Token": "dummy-imdsv2-token",
+                "X-Company-Secret": "dummy-secret",
+            },
+        )
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            opener.fetcher, "_send", side_effect=simulated_send
+        ):
+            response = opener.open(request)
+
+        with response:
+            self.assertEqual(response.read(), b"PUBLIC_FIXTURE_CONTENT")
+        self.assertIn("x-api-key", sent[0][1])
+        self.assertIn("x-aws-ec2-metadata-token", sent[0][1])
+        self.assertIn("x-company-secret", sent[0][1])
+        self.assertNotIn("x-api-key", sent[1][1])
+        self.assertNotIn("x-aws-ec2-metadata-token", sent[1][1])
+        self.assertNotIn("x-company-secret", sent[1][1])
+
     def test_prepared_request_method_body_and_headers_are_preserved(self) -> None:
         policy = FetchPolicy(allowed_hosts=frozenset({"public.example"}))
         opener = SafeUrllibOpener(policy=policy)
@@ -86,8 +128,28 @@ class SafeUrllibOpenerTests(unittest.TestCase):
         ):
             response = opener.open(request, timeout=3)
 
-        self.assertEqual(response.read(), b"ok")
+        with response:
+            self.assertEqual(response.read(), b"ok")
         self.assertEqual(calls, [("https://public.example/submit", "PUT", b"dummy body", "fixture", 3.0)])
+
+    def test_per_request_policy_override_can_target_an_exact_local_fixture(self) -> None:
+        opener = SafeUrllibOpener()
+        policy = FetchPolicy(
+            allowed_ips=frozenset({"127.0.0.1"}),
+            allowed_ports=frozenset({80}),
+        )
+        local_ip = ipaddress.ip_address("127.0.0.1")
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None, **kwargs):
+            del headers, body, timeout_seconds, kwargs
+            self.assertEqual(address, local_ip)
+            return FetchResponse(200, (), b"CONTROLLED_LOCAL_FIXTURE", target.url, (), method)
+
+        with patch.object(opener.fetcher, "_send", side_effect=simulated_send):
+            with opener.open("http://127.0.0.1/status", policy=policy) as response:
+                self.assertEqual(response.read(), b"CONTROLLED_LOCAL_FIXTURE")
+            with self.assertRaises(SafeUrllibError):
+                opener.open("http://127.0.0.1/status")
 
     def test_http_error_status_raises_standard_http_error_with_body(self) -> None:
         opener = SafeUrllibOpener()
@@ -102,9 +164,12 @@ class SafeUrllibOpenerTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as raised:
                 opener.open("https://public.example/missing")
 
-        self.assertEqual(raised.exception.code, 404)
-        self.assertEqual(raised.exception.headers.get("X-Fixture"), "not-found")
-        self.assertEqual(raised.exception.read(), b"missing fixture")
+        try:
+            self.assertEqual(raised.exception.code, 404)
+            self.assertEqual(raised.exception.headers.get("X-Fixture"), "not-found")
+            self.assertEqual(raised.exception.read(), b"missing fixture")
+        finally:
+            raised.exception.close()
 
     def test_custom_tls_context_and_unsupported_options_fail_closed(self) -> None:
         opener = SafeUrllibOpener()

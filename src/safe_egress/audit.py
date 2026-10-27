@@ -73,6 +73,9 @@ def _client_variables(tree: ast.Module, modules: dict[str, str], symbols: dict[s
         "safe_egress.SafeFetcher",
         "safe_egress.client.SafeFetcher",
         "safe_egress.requests_adapter.SafeRequestsSession",
+        "safe_egress.requests_compat.Session",
+        "safe_egress.requests_compat.SafeRequestsSession",
+        "safe_egress.requests_compat.session",
         "safe_egress.httpx_adapter.SafeClient",
         "safe_egress.httpx_adapter.SafeAsyncClient",
         "safe_egress.aiohttp_adapter.safe_aiohttp_session",
@@ -193,6 +196,14 @@ def scan_source(source: str, path: str = "<string>") -> list[AuditFinding]:
             findings.append(AuditFinding(path, node.lineno, f"{client}.{parts[-1]}", policy_bound))
         elif root in {"requests", "httpx"} and parts[-1] in _REQUEST_METHODS:
             findings.append(AuditFinding(path, node.lineno, name))
+        elif (
+            name.startswith("safe_egress.requests_compat.")
+            and parts[-1] in {"request", "get", "options", "head", "post", "put", "patch", "delete"}
+        ):
+            # The module-level Requests-shaped facade creates a fresh safe
+            # session for each call; its Session/session constructors are
+            # tracked above for methods invoked on persistent clients.
+            findings.append(AuditFinding(path, node.lineno, name, policy_bound=True))
         elif root == "urllib3" and (
             name == "urllib3.request"
             or (

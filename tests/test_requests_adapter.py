@@ -48,6 +48,133 @@ class SafeRequestsSessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.text, "PUBLIC_FIXTURE_CONTENT")
         self.assertEqual(response.url, "https://public.example/resource")
+        self.assertEqual(response.safe_egress_peer_ip, str(public_ip))
+
+    def test_response_cookies_are_available_to_later_same_origin_requests(self) -> None:
+        fetcher = SafeFetcher()
+        public_ip = ipaddress.ip_address("93.184.216.34")
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", (str(public_ip), 443))]
+        sent_headers: list[dict[str, str]] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, body, timeout_seconds
+            sent_headers.append(dict(headers))
+            response_headers = (
+                (("Set-Cookie", "session=dummy; Path=/; HttpOnly"),)
+                if target.request_target == "/login"
+                else ()
+            )
+            return FetchResponse(200, response_headers, b"ok", target.url, (), method)
+
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            fetcher, "_send", side_effect=simulated_send
+        ):
+            with SafeRequestsSession(fetcher=fetcher) as client:
+                client.get("https://public.example/login")
+                client.get("https://public.example/account")
+
+        self.assertEqual(client.cookies.get_dict(), {"session": "dummy"})
+        self.assertEqual(sent_headers[1].get("Cookie"), "session=dummy")
+
+    def test_multiple_set_cookie_headers_are_stored_independently(self) -> None:
+        fetcher = SafeFetcher()
+        public_ip = ipaddress.ip_address("93.184.216.34")
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", (str(public_ip), 443))]
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, headers, body, timeout_seconds
+            return FetchResponse(
+                200,
+                (
+                    ("Set-Cookie", "first=dummy-one; Path=/"),
+                    ("Set-Cookie", "second=dummy-two; Path=/"),
+                ),
+                b"ok",
+                target.url,
+                (),
+                method,
+            )
+
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            fetcher, "_send", side_effect=simulated_send
+        ):
+            with SafeRequestsSession(fetcher=fetcher) as client:
+                client.get("https://public.example/login")
+
+        self.assertEqual(
+            client.cookies.get_dict(),
+            {"first": "dummy-one", "second": "dummy-two"},
+        )
+
+    def test_response_domain_cookie_is_not_sent_on_cross_origin_redirect(self) -> None:
+        fetcher = SafeFetcher()
+        sent: list[tuple[str, dict[str, str]]] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, body, timeout_seconds
+            sent.append((target.host, {name.lower(): value for name, value in headers.items()}))
+            if target.host == "public.example.com":
+                return FetchResponse(
+                    302,
+                    (
+                        ("Location", "https://other.example.com/next"),
+                        ("Set-Cookie", "shared=dummy; Domain=.example.com; Path=/"),
+                    ),
+                    b"",
+                    target.url,
+                    (),
+                    method,
+                )
+            return FetchResponse(200, (), b"PUBLIC_FIXTURE_CONTENT", target.url, (), method)
+
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 443))]
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            fetcher, "_send", side_effect=simulated_send
+        ):
+            with SafeRequestsSession(fetcher=fetcher) as client:
+                response = client.get("https://public.example.com/start")
+
+        self.assertEqual(response.text, "PUBLIC_FIXTURE_CONTENT")
+        self.assertEqual(client.cookies.get("shared"), "dummy")
+        self.assertNotIn("cookie", sent[1][1])
+
+    def test_response_peer_ip_tracks_the_final_redirect_destination(self) -> None:
+        fetcher = SafeFetcher(FetchPolicy(allowed_hosts=frozenset({"first.example", "second.example"})))
+        first_ip = ipaddress.ip_address("93.184.216.34")
+        final_ip = ipaddress.ip_address("1.1.1.1")
+        sent: list[tuple[str, ipaddress.IPv4Address]] = []
+
+        def resolve(host, port, *, type):
+            del port, type
+            address = first_ip if host == "first.example" else final_ip
+            return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", (str(address), 443))]
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del headers, body, timeout_seconds
+            sent.append((target.url, address))
+            if target.host == "first.example":
+                return FetchResponse(
+                    302,
+                    (("Location", "https://second.example/final"),),
+                    b"",
+                    target.url,
+                    (),
+                    method,
+                )
+            return FetchResponse(200, (), b"FINAL_PUBLIC_FIXTURE", target.url, (), method)
+
+        with patch("safe_egress.client.socket.getaddrinfo", side_effect=resolve), patch.object(
+            fetcher, "_send", side_effect=simulated_send
+        ):
+            with SafeRequestsSession(fetcher=fetcher) as client:
+                response = client.get("https://first.example/start")
+
+        self.assertEqual(response.content, b"FINAL_PUBLIC_FIXTURE")
+        self.assertEqual(sent, [
+            ("https://first.example/start", first_ip),
+            ("https://second.example/final", final_ip),
+        ])
+        self.assertEqual(response.safe_egress_peer_ip, str(final_ip))
 
     def test_per_request_policy_allows_explicit_private_service_without_leaking(self) -> None:
         fetcher = SafeFetcher()
@@ -59,7 +186,7 @@ class SafeRequestsSessionTests(unittest.TestCase):
             sent.append(target.url)
             return FetchResponse(200, (), b"PRIVATE_TEST_FIXTURE", target.url, (), method)
 
-        expected_policy = FetchPolicy(allowed_private_hosts=frozenset({"127.0.0.1"}))
+        expected_policy = FetchPolicy(allowed_ips=frozenset({"127.0.0.1"}))
         url = "http://127.0.0.1/internal-status"
         with patch.object(fetcher, "_send", side_effect=simulated_send):
             with SafeRequestsSession(fetcher=fetcher) as client:
@@ -102,8 +229,8 @@ class SafeRequestsSessionTests(unittest.TestCase):
     def test_concurrent_per_request_policies_do_not_cross_between_calls(self) -> None:
         fetcher = SafeFetcher()
         policies = {
-            "first": FetchPolicy(allowed_private_hosts=frozenset({"127.0.0.1"}), timeout_seconds=2),
-            "second": FetchPolicy(allowed_private_hosts=frozenset({"127.0.0.1"}), timeout_seconds=3),
+            "first": FetchPolicy(allowed_ips=frozenset({"127.0.0.1"}), timeout_seconds=2),
+            "second": FetchPolicy(allowed_ips=frozenset({"127.0.0.1"}), timeout_seconds=3),
         }
         barrier = threading.Barrier(2)
         sent: dict[str, FetchPolicy | None] = {}
@@ -282,29 +409,28 @@ class SafeRequestsSessionTests(unittest.TestCase):
         )
 
     def test_redirect_to_loopback_is_rejected_before_second_send(self) -> None:
-        fetcher = SafeFetcher()
-        sent: list[str] = []
+        locations = (
+            "http://127.0.0.1:43127/internal-status",
+            "//127.0.0.1:43127/internal-status",
+        )
+        for location in locations:
+            with self.subTest(location=location):
+                fetcher = SafeFetcher()
+                sent: list[str] = []
 
-        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
-            sent.append(target.url)
-            return FetchResponse(
-                302,
-                (("Location", "http://127.0.0.1:43127/internal-status"),),
-                b"",
-                target.url,
-                (),
-                method,
-            )
+                def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+                    sent.append(target.url)
+                    return FetchResponse(302, (("Location", location),), b"", target.url, (), method)
 
-        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 80))]
-        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
-            fetcher, "_send", side_effect=simulated_send
-        ):
-            with SafeRequestsSession(fetcher=fetcher) as client:
-                with self.assertRaises(requests.ConnectionError):
-                    client.get("http://public.example/start")
+                records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 80))]
+                with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+                    fetcher, "_send", side_effect=simulated_send
+                ):
+                    with SafeRequestsSession(fetcher=fetcher) as client:
+                        with self.assertRaises(requests.ConnectionError):
+                            client.get("http://public.example/start")
 
-        self.assertEqual(sent, ["http://public.example/start"])
+                self.assertEqual(sent, ["http://public.example/start"])
 
     def test_requests_parser_canonicalization_cannot_hide_loopback(self) -> None:
         fetcher = SafeFetcher()
@@ -341,7 +467,9 @@ class SafeRequestsSessionTests(unittest.TestCase):
             self.assertIs(client.get_adapter("https://public.example/"), safe_adapter)
 
     def test_cross_origin_redirect_removes_origin_metadata(self) -> None:
-        fetcher = SafeFetcher()
+        fetcher = SafeFetcher(
+            FetchPolicy(additional_sensitive_headers=frozenset({"X-Company-Secret"}))
+        )
         sent: list[tuple[str, dict[str, str]]] = []
 
         def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
@@ -369,6 +497,10 @@ class SafeRequestsSessionTests(unittest.TestCase):
                         "Authorization": "Bearer dummy",
                         "Cookie": "session=dummy",
                         "Origin": "https://caller.example",
+                        "Referer": "https://public.example/page?token=dummy",
+                        "X-API-Key": "dummy-api-key",
+                        "X-Aws-Ec2-Metadata-Token": "dummy-imdsv2-token",
+                        "X-Company-Secret": "dummy-custom-secret",
                     },
                 )
 
@@ -376,9 +508,69 @@ class SafeRequestsSessionTests(unittest.TestCase):
         self.assertIn("authorization", sent[0][1])
         self.assertIn("cookie", sent[0][1])
         self.assertIn("origin", sent[0][1])
+        self.assertIn("referer", sent[0][1])
+        self.assertIn("x-api-key", sent[0][1])
+        self.assertIn("x-aws-ec2-metadata-token", sent[0][1])
+        self.assertIn("x-company-secret", sent[0][1])
         self.assertNotIn("authorization", sent[1][1])
         self.assertNotIn("cookie", sent[1][1])
         self.assertNotIn("origin", sent[1][1])
+        self.assertNotIn("referer", sent[1][1])
+        self.assertNotIn("x-api-key", sent[1][1])
+        self.assertNotIn("x-aws-ec2-metadata-token", sent[1][1])
+        self.assertNotIn("x-company-secret", sent[1][1])
+
+    def test_session_cookie_jar_does_not_send_domain_cookie_across_origins(self) -> None:
+        fetcher = SafeFetcher()
+        sent: list[tuple[str, dict[str, str]]] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, body, timeout_seconds
+            sent.append((target.host, {key.lower(): value for key, value in headers.items()}))
+            if target.host == "public.example":
+                return FetchResponse(
+                    302,
+                    (("Location", "https://other.example/next"),),
+                    b"",
+                    target.url,
+                    (),
+                    method,
+                )
+            return FetchResponse(200, (), b"PUBLIC_FIXTURE_CONTENT", target.url, (), method)
+
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 443))]
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            fetcher, "_send", side_effect=simulated_send
+        ):
+            with SafeRequestsSession(fetcher=fetcher) as client:
+                client.cookies.set("session", "dummy-cookie", domain=".example", path="/")
+                response = client.get("https://public.example/start")
+
+        self.assertEqual(response.text, "PUBLIC_FIXTURE_CONTENT")
+        self.assertIn("cookie", sent[0][1])
+        self.assertNotIn("cookie", sent[1][1])
+
+    def test_session_cookie_jar_is_preserved_on_same_origin_redirect(self) -> None:
+        fetcher = SafeFetcher()
+        sent: list[dict[str, str]] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, body, timeout_seconds
+            sent.append({key.lower(): value for key, value in headers.items()})
+            if target.request_target == "/start":
+                return FetchResponse(302, (("Location", "/next"),), b"", target.url, (), method)
+            return FetchResponse(200, (), b"PUBLIC_FIXTURE_CONTENT", target.url, (), method)
+
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 443))]
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            fetcher, "_send", side_effect=simulated_send
+        ):
+            with SafeRequestsSession(fetcher=fetcher) as client:
+                client.cookies.set("session", "dummy-cookie", domain=".example", path="/")
+                response = client.get("https://public.example/start")
+
+        self.assertEqual(response.text, "PUBLIC_FIXTURE_CONTENT")
+        self.assertTrue(all("cookie" in headers for headers in sent))
 
     def test_session_basic_auth_is_not_forwarded_across_origins(self) -> None:
         fetcher = SafeFetcher()
@@ -410,6 +602,47 @@ class SafeRequestsSessionTests(unittest.TestCase):
         self.assertIn("authorization", sent[0][1])
         self.assertTrue(sent[0][1]["authorization"].startswith("Basic "))
         self.assertNotIn("authorization", sent[1][1])
+
+    def test_netrc_auth_is_not_reapplied_on_https_to_http_redirect(self) -> None:
+        fetcher = SafeFetcher()
+        sent: list[tuple[str, dict[str, str]]] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, body, timeout_seconds
+            sent.append((target.url, {key.lower(): value for key, value in headers.items()}))
+            if target.scheme == "https":
+                return FetchResponse(
+                    302,
+                    (("Location", "http://public.example/next"),),
+                    b"",
+                    target.url,
+                    (),
+                    method,
+                )
+            return FetchResponse(200, (), b"PUBLIC_FIXTURE_CONTENT", target.url, (), method)
+
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 443))]
+        with (
+            patch("safe_egress.client.socket.getaddrinfo", return_value=records),
+            patch.object(fetcher, "_send", side_effect=simulated_send),
+            patch("requests.sessions.get_netrc_auth", return_value=("dummy-user", "dummy-password")),
+            patch("requests.sessions.get_environ_proxies", return_value={}),
+        ):
+            with SafeRequestsSession(fetcher=fetcher) as client:
+                # Exercise Requests' .netrc redirect hook even though the
+                # public SafeRequestsSession API forbids enabling trust_env.
+                object.__setattr__(client, "trust_env", True)
+                response = client.get("https://public.example/start")
+
+        self.assertEqual(response.content, b"PUBLIC_FIXTURE_CONTENT")
+        self.assertIn("authorization", sent[0][1])
+        self.assertNotIn("authorization", sent[1][1])
+
+    def test_session_trust_env_cannot_be_enabled(self) -> None:
+        with SafeRequestsSession() as client:
+            with self.assertRaises(PolicyError):
+                client.trust_env = True
+            self.assertFalse(client.trust_env)
 
     def test_streaming_response_option_is_rejected(self) -> None:
         with SafeRequestsSession() as client:

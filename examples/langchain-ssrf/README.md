@@ -51,9 +51,9 @@ The harness imports the real retriever and vulnerable loader source. It intercep
 
 The six integration tests cover the vulnerable boundary, loopback blocking in the hardened aiohttp and Requests paths, and successful public-fixture indexing. The original checkout is not modified; the hardened loader is an isolated companion, not a patch to LangChain's installed loader.
 
-The project’s existing `tests/unit_tests/retrievers/test_web_research.py` passed five tests on both tags in the prepared Poetry environment. These checks do not cover LangChain's full test suite or every possible application-specific fetch path.
+The project’s existing `tests/unit_tests/retrievers/test_web_research.py` passed five tests on both tags in the prepared Poetry environment. Inspection shows these five tests cover only `QuestionListOutputParser`; they do not exercise `WebResearchRetriever`, `AsyncHtmlLoader`, or network fetching. They do not cover LangChain's full test suite or every possible application-specific fetch path.
 
-To rerun the complete local matrix and write phase logs plus a JSON report, use an environment that already has the Community test dependencies and Poetry:
+To rerun the complete local matrix and write phase results plus a JSON report, use an environment that already has the Community test dependencies and Poetry:
 
 ```sh
 PYTHONPATH=src poetry run python examples/langchain-ssrf/run_eval.py \
@@ -61,7 +61,7 @@ PYTHONPATH=src poetry run python examples/langchain-ssrf/run_eval.py \
   --fixed ../langchain-community-fixed-0.2.9
 ```
 
-The runner does not install packages. It records the vulnerable and fixed Git revisions, builds both wheels, runs the five focused project tests on each revision, checks the default opt-in behavior for each source tree, and runs the six fixture-only SSRF/utility tests against both source revisions. The latest local Python 3.11 run passed all eight phases; logs and the machine-readable report are in [`results/`](results/).
+The runner does not install packages. It records the vulnerable and fixed Git revisions, builds both wheels, runs the five parser-only project tests on each revision, checks the default opt-in behavior for each source tree, and runs the six fixture-only SSRF/utility tests against both source revisions. The latest Python 3.11 rerun passed all eight phases in 4.703 seconds. The report and per-phase results are in [`results/continued-upload-limit-20261020/`](results/continued-upload-limit-20261020/). It used the existing `langchain-community-OHhycLXa-py3.11` Python environment; no dependencies were installed.
 
 ## Build smoke
 

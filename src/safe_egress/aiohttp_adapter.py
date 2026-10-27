@@ -3,7 +3,8 @@
 The resolver validates every DNS result before aiohttp can open a socket. The
 connector then connects to one of those numeric addresses, avoiding a second
 hostname lookup. Redirects resolve again through the same policy resolver.
-Cross-origin redirects remove authorization, cookie, and origin headers.
+Cross-origin redirects remove standard credential headers and configured custom
+secret headers.
 Cookie storage, URL credentials, proxy routes, and caller-supplied connectors
 are rejected because they can weaken destination or credential boundaries.
 
@@ -25,7 +26,12 @@ try:
 except ImportError as exc:  # pragma: no cover - depends on optional extra
     raise ImportError("safe_aiohttp_session requires the optional 'aiohttp' dependency") from exc
 
-from .errors import PolicyError, RedirectLimitError, ResponseTooLargeError
+from .errors import (
+    PolicyError,
+    RedirectLimitError,
+    RequestTooLargeError,
+    ResponseTooLargeError,
+)
 from .policy import FetchPolicy
 
 
@@ -81,12 +87,10 @@ class _PolicyResolver(aiohttp.abc.AbstractResolver):
         unique_addresses = list(dict.fromkeys(addresses))
         if not unique_addresses:
             raise PolicyError("Hostname resolved to no usable addresses")
-        private_override = self._policy.permits_private(normalized)
-        if not private_override:
-            for _, address_text in unique_addresses:
-                address = ipaddress.ip_address(address_text)
-                if not self._policy.is_public_address(address):
-                    raise PolicyError("Hostname resolved to a non-public address")
+        for _, address_text in unique_addresses:
+            address = ipaddress.ip_address(address_text)
+            if not self._policy.permits_address(address):
+                raise PolicyError("Hostname resolved to a non-public address")
 
         return [
             {
@@ -193,6 +197,25 @@ class _BoundedStreamReader:
         return getattr(self._reader, name)
 
 
+class _BoundedStreamWriter:
+    """Delegate aiohttp writes while limiting request bytes sent to the peer."""
+
+    def __init__(self, writer: Any, limit: int) -> None:
+        self._writer = writer
+        self._limit = limit
+        self._written_bytes = 0
+
+    async def write(self, data: bytes) -> None:
+        size = len(data)
+        if self._written_bytes + size > self._limit:
+            raise RequestTooLargeError("Request body exceeded the configured byte limit")
+        await self._writer.write(data)
+        self._written_bytes += size
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._writer, name)
+
+
 def _response_class_for(limit: int) -> type[aiohttp.ClientResponse]:
     """Wrap every response body reader with the policy's decoded-byte cap."""
 
@@ -249,10 +272,28 @@ def _request_class_for(policy: FetchPolicy) -> type[aiohttp.ClientRequest]:
                 address = ipaddress.ip_address(host)
             except ValueError:
                 address = None
-            if address is not None and not policy.permits_private(host) and not policy.is_public_address(address):
+            if address is not None and not policy.permits_address(address):
                 raise PolicyError("IP literal is not a public address")
 
             super().__init__(method, url, **kwargs)
+
+            # aiohttp payloads expose their size when it is known (including
+            # bytes and seekable files). Reject these before the connector
+            # opens a socket. Unknown-size streaming payloads are capped by
+            # write_bytes below.
+            body_size = getattr(self.body, "size", None)
+            if body_size is not None and body_size > policy.max_request_bytes:
+                raise RequestTooLargeError(
+                    "Request body exceeded the configured byte limit"
+                )
+
+        async def write_bytes(self, writer: Any, conn: Any) -> None:
+            # aiohttp streams Payload instances through writer.write(). This
+            # proxy counts each chunk before it reaches the transport, so an
+            # unknown-size upload cannot exceed the configured limit.
+            await super().write_bytes(
+                _BoundedStreamWriter(writer, policy.max_request_bytes), conn
+            )
 
     _PolicyClientRequest.__name__ = "PolicyClientRequest"
     return _PolicyClientRequest
@@ -262,6 +303,7 @@ async def _strip_cross_origin_redirect_headers(
     _session: aiohttp.ClientSession,
     _context: Any,
     params: Any,
+    policy: FetchPolicy | None = None,
 ) -> None:
     """Remove caller credentials before aiohttp sends a cross-origin hop."""
     location = params.response.headers.get("Location") or params.response.headers.get("URI")
@@ -275,8 +317,10 @@ async def _strip_cross_origin_redirect_headers(
         # redirected request should be sent with the original headers.
         cross_origin = True
     if cross_origin:
-        for name in ("Authorization", "Cookie", "Origin"):
-            params.headers.pop(name, None)
+        sensitive_headers = (policy or FetchPolicy()).redirect_sensitive_headers
+        for name in tuple(params.headers):
+            if name.lower() in sensitive_headers:
+                params.headers.pop(name, None)
 
 
 def _safe_redirect_trace_config(policy: FetchPolicy) -> aiohttp.TraceConfig:
@@ -288,7 +332,7 @@ def _safe_redirect_trace_config(policy: FetchPolicy) -> aiohttp.TraceConfig:
         context.safe_egress_redirect_count = count
         if count > policy.max_redirects:
             raise RedirectLimitError("The response exceeded the configured redirect limit")
-        await _strip_cross_origin_redirect_headers(session, context, params)
+        await _strip_cross_origin_redirect_headers(session, context, params, policy)
 
     trace.on_request_redirect.append(handle_redirect)
     return trace

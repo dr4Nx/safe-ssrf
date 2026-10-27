@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a fixture-only PyJWT redirect SSRF reproduction for one source tag.
+"""Run a fixture-only PyJWT SSRF reproduction for one source checkout.
 
 Only the HTTP transport is synthetic. PyJWT's actual PyJWKClient source and
 urllib's actual redirect/error handlers run. No socket is opened.
@@ -34,6 +34,10 @@ EXPECTED_VERSIONS = {
     "vulnerable-scheme": "2.12.1",
     "fixed-scheme": "2.13.0",
     "hardened-scheme": "2.12.1",
+    # These modes deliberately skip a version pin while asserting behavior for
+    # a separately identified checkout; use them for current upstream source.
+    "fixed-current": None,
+    "fixed-current-scheme": None,
 }
 
 
@@ -111,7 +115,7 @@ def _load_pyjwt(repo: Path, mode: str):
     from jwt.exceptions import PyJWKClientConnectionError
 
     expected = EXPECTED_VERSIONS[mode]
-    if jwt.__version__ != expected:
+    if expected is not None and jwt.__version__ != expected:
         raise SystemExit(f"Expected PyJWT {expected}, found {jwt.__version__} at {jwt.__file__}")
     return jwt, PyJWKClient, PyJWKClientConnectionError
 
@@ -140,7 +144,7 @@ def _run_source_mode(repo: Path, mode: str) -> dict[str, Any]:
             raise AssertionError("The vulnerable PyJWT control did not follow the synthetic redirect")
         return output
 
-    if mode == "fixed":
+    if mode in {"fixed", "fixed-current"}:
         client = PyJWKClient(PUBLIC_URL, headers=headers, timeout=1, cache_jwk_set=False)
         with _patched_build_opener(redirect=True) as fixture_handlers:
             try:
@@ -262,7 +266,7 @@ def _run_scheme_mode(repo: Path, mode: str, PyJWKClient: Any, PyJWKClientConnect
             )
             return output
 
-        if mode == "fixed-scheme":
+        if mode in {"fixed-scheme", "fixed-current-scheme"}:
             from jwt.exceptions import PyJWKClientError
 
             try:

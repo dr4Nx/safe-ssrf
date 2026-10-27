@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from datetime import timedelta
+from email.message import Message
 from io import BytesIO
 import math
 from types import MappingProxyType
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -108,6 +110,17 @@ class SafeRequestsAdapter(BaseAdapter):
         response.elapsed = timedelta(0)
         response.reason = ""
         response.raw = BytesIO(fetched.content)
+        # Requests delegates cookie persistence to http.cookiejar through
+        # ``response.raw._original_response.msg``. Provide the parsed response
+        # headers in that shape even though the body is already buffered.
+        cookie_headers = Message()
+        for name, value in fetched.headers:
+            cookie_headers.add_header(name, value)
+        response.raw._original_response = SimpleNamespace(msg=cookie_headers)
+        # Some integrations need the actual peer for connection bookkeeping.
+        # This is the checked numeric destination used by SafeFetcher, not a
+        # second DNS lookup performed after the response arrives.
+        response.safe_egress_peer_ip = fetched.peer_ip
         return response
 
     def close(self) -> None:
@@ -180,12 +193,14 @@ class SafeRequestsSession(requests.Session):
         self._safe_egress_locked = True
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Prevent weakening the adapter table or redirect cap after setup."""
+        """Prevent weakening routing, proxy, or redirect controls after setup."""
         if getattr(self, "_safe_egress_locked", False):
             if name == "adapters":
                 raise PolicyError("SafeRequestsSession does not allow replacing its adapter table")
             if name == "max_redirects":
                 raise PolicyError("SafeRequestsSession redirect limit is controlled by FetchPolicy")
+            if name == "trust_env" and value is not False:
+                raise PolicyError("SafeRequestsSession does not allow enabling environment trust")
         super().__setattr__(name, value)
 
     def mount(self, prefix: str, adapter: BaseAdapter) -> None:
@@ -226,9 +241,12 @@ class SafeRequestsSession(requests.Session):
             _REQUEST_POLICY.reset(token)
 
     def rebuild_auth(self, prepared_request: requests.PreparedRequest, response: requests.Response) -> None:
-        """Drop sensitive headers when Requests builds a cross-origin redirect."""
+        """Drop sensitive headers without letting Requests reapply ``.netrc`` auth."""
         old_url = response.request.url if response.request is not None else response.url
         if old_url is not None and _origin(old_url) != _origin(prepared_request.url):
-            for name in ("Authorization", "Cookie", "Origin"):
-                prepared_request.headers.pop(name, None)
-        super().rebuild_auth(prepared_request, response)
+            policy = _REQUEST_POLICY.get()
+            if policy is None:
+                policy = self._safe_egress_adapters["http://"].fetcher.policy
+            for name in tuple(prepared_request.headers):
+                if name.lower() in policy.redirect_sensitive_headers:
+                    prepared_request.headers.pop(name, None)

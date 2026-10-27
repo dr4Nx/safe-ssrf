@@ -53,7 +53,8 @@ class SocketIntegrationTests(unittest.TestCase):
 
         try:
             policy = FetchPolicy(
-                allowed_private_hosts=frozenset({"fixture.public.test"}),
+                allowed_hosts=frozenset({"fixture.public.test"}),
+                allowed_ips=frozenset({"127.0.0.1"}),
                 allowed_ports=frozenset({port}),
             )
             fetcher = SafeFetcher(policy)

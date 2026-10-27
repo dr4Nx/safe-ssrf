@@ -1,6 +1,7 @@
 """Policy-driven outbound HTTP fetching."""
 
-from .client import FetchResponse, SafeFetcher
+from .client import FetchResponse, SafeFetcher, ValidatedDestination
+from .curl_cffi_adapter import SafeCurlCffiSession
 from .errors import (
     FetchError,
     PolicyError,
@@ -21,4 +22,6 @@ __all__ = [
     "ResponseTooLargeError",
     "RequestsGet",
     "SafeFetcher",
+    "SafeCurlCffiSession",
+    "ValidatedDestination",
 ]

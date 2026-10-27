@@ -57,6 +57,11 @@ def main() -> int:
     parser.add_argument("--vulnerable-scheme", type=Path, required=True)
     parser.add_argument("--fixed-redirect", type=Path, required=True)
     parser.add_argument("--fixed-scheme", type=Path, required=True)
+    parser.add_argument(
+        "--current-upstream",
+        type=Path,
+        help="Optional current PyJWT checkout for behavior-only fixed controls",
+    )
     parser.add_argument("--output-dir", type=Path, default=CASE_DIR / "results")
     args = parser.parse_args()
 
@@ -66,6 +71,8 @@ def main() -> int:
         "fixed_redirect": args.fixed_redirect.resolve(),
         "fixed_scheme": args.fixed_scheme.resolve(),
     }
+    if args.current_upstream is not None:
+        repos["current_upstream"] = args.current_upstream.resolve()
     out = args.output_dir.resolve()
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -89,14 +96,21 @@ def main() -> int:
         repos["fixed_redirect"], env, out,
     )
 
-    case_specs = (
+    case_specs = [
         ("redirect_vulnerable", "vulnerable_redirect", "vulnerable"),
         ("redirect_fixed", "fixed_redirect", "fixed"),
         ("redirect_hardened", "vulnerable_redirect", "hardened"),
         ("scheme_vulnerable", "vulnerable_scheme", "vulnerable-scheme"),
         ("scheme_fixed", "fixed_scheme", "fixed-scheme"),
         ("scheme_hardened", "vulnerable_scheme", "hardened-scheme"),
-    )
+    ]
+    if args.current_upstream is not None:
+        case_specs.extend(
+            (
+                ("current_upstream_redirect", "current_upstream", "fixed-current"),
+                ("current_upstream_scheme", "current_upstream", "fixed-current-scheme"),
+            )
+        )
     for name, repo_key, mode in case_specs:
         phases[name] = run_phase(
             name,

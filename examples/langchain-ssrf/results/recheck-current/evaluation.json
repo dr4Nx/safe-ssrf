@@ -1,0 +1,104 @@
+{
+  "created_utc": "2026-10-20T12:09:05.586578+00:00",
+  "python": "3.11.17 (main, Oct  1 2026, 00:48:48) [Clang 21.0.0 (clang-2100.3.34.2)]",
+  "vulnerable_repository": "/Users/evanluo/Documents/Github/ssrf-study/checkout",
+  "vulnerable_revision": "007c5a85d5264203ec0e0a6c44eb13b079bfb984",
+  "fixed_repository": "/Users/evanluo/Documents/Github/langchain-community-fixed-0.2.9",
+  "fixed_revision": "f4ee3c8a223ea4b3d7bd9e08fcd3769c70e3446c",
+  "fixture_network": "in-memory responses and synthetic DNS; no sockets or external services",
+  "phases": {
+    "vulnerable_build": {
+      "command": [
+        "poetry",
+        "build",
+        "--format",
+        "wheel",
+        "--output",
+        "/tmp/safe-egress-langchain-vulnerable-wheel"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "duration_seconds": 0.987
+    },
+    "vulnerable_existing_tests": {
+      "command": [
+        "/Users/evanluo/Library/Caches/pypoetry/virtualenvs/langchain-community-OHhycLXa-py3.11/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/unit_tests/retrievers/test_web_research.py"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "duration_seconds": 0.559
+    },
+    "vulnerable_release_default": {
+      "command": [
+        "/Users/evanluo/Library/Caches/pypoetry/virtualenvs/langchain-community-OHhycLXa-py3.11/bin/python",
+        "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/check_release_default.py"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "duration_seconds": 0.325
+    },
+    "fixed_build": {
+      "command": [
+        "poetry",
+        "build",
+        "--format",
+        "wheel",
+        "--output",
+        "/tmp/safe-egress-langchain-fixed-wheel"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "duration_seconds": 1.122
+    },
+    "fixed_existing_tests": {
+      "command": [
+        "/Users/evanluo/Library/Caches/pypoetry/virtualenvs/langchain-community-OHhycLXa-py3.11/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/unit_tests/retrievers/test_web_research.py"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "duration_seconds": 0.436
+    },
+    "fixed_release_default": {
+      "command": [
+        "/Users/evanluo/Library/Caches/pypoetry/virtualenvs/langchain-community-OHhycLXa-py3.11/bin/python",
+        "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/check_release_default.py"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "duration_seconds": 0.323
+    },
+    "ssrf_and_utility_integration": {
+      "command": [
+        "/Users/evanluo/Library/Caches/pypoetry/virtualenvs/langchain-community-OHhycLXa-py3.11/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/test_web_research_integration.py"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "duration_seconds": 0.457
+    },
+    "ssrf_and_utility_integration_fixed_source": {
+      "command": [
+        "/Users/evanluo/Library/Caches/pypoetry/virtualenvs/langchain-community-OHhycLXa-py3.11/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "/Users/evanluo/Documents/Github/safe-egress/examples/langchain-ssrf/test_web_research_integration.py"
+      ],
+      "exit_code": 0,
+      "status": "passed",
+      "duration_seconds": 0.441
+    }
+  },
+  "execution_time_seconds": 4.65
+}

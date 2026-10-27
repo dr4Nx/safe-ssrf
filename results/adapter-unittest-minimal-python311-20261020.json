@@ -1,0 +1,14 @@
+{
+  "python": "3.11.17",
+  "command": [
+    "python3.11",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "tests"
+  ],
+  "returncode": 0,
+  "duration_seconds": 0.494,
+  "optional_dependencies": "not installed in this system interpreter; tests skip unavailable client integrations"
+}

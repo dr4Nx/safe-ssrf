@@ -9,6 +9,7 @@ fail-closed in :class:`SafeRequestsSession`.
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Any
 
 try:
@@ -17,18 +18,69 @@ except ImportError as exc:  # pragma: no cover - depends on optional extra
     raise ImportError("requests_compat requires the optional 'requests' dependency") from exc
 
 from .requests_adapter import SafeRequestsSession
+from .policy import FetchPolicy, normalize_host
 
 
 Session = SafeRequestsSession
 Request = _requests.Request
+PreparedRequest = _requests.PreparedRequest
 Response = _requests.Response
 exceptions = _requests.exceptions
+# Requests exposes these exception classes at both ``requests`` and
+# ``requests.exceptions``. Preserve those common imports for aliased modules.
+ConnectTimeout = _requests.ConnectTimeout
+ConnectionError = _requests.ConnectionError
+FileModeWarning = _requests.FileModeWarning
+HTTPError = _requests.HTTPError
+JSONDecodeError = _requests.JSONDecodeError
+ReadTimeout = _requests.ReadTimeout
+RequestException = _requests.RequestException
+Timeout = _requests.Timeout
+TooManyRedirects = _requests.TooManyRedirects
+URLRequired = _requests.URLRequired
+
+
+def Allow(*destinations: str) -> FetchPolicy:
+    """Build a policy allowing only these exact hostnames and IP addresses.
+
+    Hostnames still must resolve only to globally routable addresses. A
+    private IP literal is permitted only when that exact address is listed;
+    passing both a hostname and private IP allows that hostname to use that
+    one private peer. No wildcard or suffix matching is supported.
+
+    Example::
+
+        import safe_egress.requests_compat as requests
+
+        policy = requests.Allow("1.2.3.4", "www.mytrusted.server")
+        response = requests.get(url, policy=policy)
+    """
+    hosts: set[str] = set()
+    addresses: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
+    for destination in destinations:
+        if not isinstance(destination, str):
+            raise ValueError("Allow destinations must be hostname or IP strings")
+        host = normalize_host(destination)
+        hosts.add(host)
+        try:
+            addresses.add(ipaddress.ip_address(host))
+        except ValueError:
+            continue
+    return FetchPolicy(
+        allowed_hosts=frozenset(hosts),
+        allowed_ips=frozenset(addresses),
+    )
 
 
 def request(method: str, url: str, **kwargs: Any) -> Response:
     """Send one request using a fresh policy-bound session."""
     with SafeRequestsSession() as session:
         return session.request(method, url, **kwargs)
+
+
+def session() -> SafeRequestsSession:
+    """Return a persistent policy-bound session, matching ``requests.session()``."""
+    return SafeRequestsSession()
 
 
 def get(url: str, params: Any = None, **kwargs: Any) -> Response:
@@ -61,10 +113,23 @@ def delete(url: str, **kwargs: Any) -> Response:
 
 
 __all__ = [
+    "Allow",
+    "ConnectTimeout",
+    "ConnectionError",
+    "FileModeWarning",
+    "FetchPolicy",
+    "HTTPError",
+    "PreparedRequest",
+    "JSONDecodeError",
     "Request",
+    "RequestException",
+    "ReadTimeout",
     "Response",
     "SafeRequestsSession",
     "Session",
+    "Timeout",
+    "TooManyRedirects",
+    "URLRequired",
     "delete",
     "exceptions",
     "get",
@@ -74,4 +139,5 @@ __all__ = [
     "post",
     "put",
     "request",
+    "session",
 ]

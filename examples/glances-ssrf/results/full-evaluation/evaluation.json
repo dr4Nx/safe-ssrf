@@ -1,0 +1,125 @@
+{
+  "created_utc": "2026-10-20T15:00:49.603244+00:00",
+  "python": "3.13.0 (v3.13.0:60403a5409f, Oct  7 2024, 00:37:40) [Clang 15.0.0 (clang-1500.3.9.4)]",
+  "revisions": {
+    "vulnerable": {
+      "tag": "v4.5.3",
+      "path": "/Users/evanluo/Documents/Github/glances-v4.5.3",
+      "expected_source_archive_sha256": "e5169d273e40740b9b13626fd566239050e36169cf678ae82329ccf0300e1767",
+      "source_file_sha256": {
+        "glances/plugins/ip/__init__.py": "ed61ba3431e4d01ad1b494687b4f935853e87bb34f025fe42bedf006dd9173b1",
+        "glances/globals.py": "cdf37170fb339626dc5e719ac0c267f26b092f2b8a4c0f8d268661e6a559093b"
+      },
+      "source_files_match_expected": true
+    },
+    "fixed": {
+      "tag": "v4.5.4",
+      "path": "/Users/evanluo/Documents/Github/glances-v4.5.4",
+      "expected_source_archive_sha256": "a4f421c608d6c40e926c0256f915f0e820d92e5837e6b5a9eea582cf9b241c4a",
+      "source_file_sha256": {
+        "glances/plugins/ip/__init__.py": "3fa950f8144d33add21324a0954bb6927fa7efc3d07444d94f9c79c378c1c5b3",
+        "glances/globals.py": "cdf37170fb339626dc5e719ac0c267f26b092f2b8a4c0f8d268661e6a559093b"
+      },
+      "source_files_match_expected": true
+    }
+  },
+  "phase_scope": {
+    "build": "local wheel build with --no-deps and --no-build-isolation",
+    "upstream_test": "test_core.TestGlances.test_012_ip; Glances test config sets public_disabled=True",
+    "fixtures": "actual source methods with in-memory urllib/SafeFetcher responses and synthetic DNS",
+    "network": "no external or internal network requests; no sockets opened by fixture evaluation"
+  },
+  "phases": {
+    "vulnerable_build": {
+      "command": [
+        "/opt/homebrew/opt/python@3.11/bin/python3.11",
+        "-m",
+        "pip",
+        "wheel",
+        "--no-deps",
+        "--no-build-isolation",
+        "--wheel-dir",
+        "/Users/evanluo/Documents/Github/safe-egress/examples/glances-ssrf/results/full-evaluation/wheels/vulnerable",
+        "/Users/evanluo/Documents/Github/glances-v4.5.3"
+      ],
+      "cwd": "/Users/evanluo/Documents/Github/safe-egress",
+      "exit_code": 0,
+      "status": "passed",
+      "elapsed_seconds": 0.927
+    },
+    "vulnerable_ip_plugin_test": {
+      "command": [
+        "python3.13",
+        "-m",
+        "unittest",
+        "test_core.TestGlances.test_012_ip",
+        "-v"
+      ],
+      "cwd": "/Users/evanluo/Documents/Github/glances-v4.5.3/tests",
+      "exit_code": 0,
+      "status": "passed",
+      "elapsed_seconds": 0.374
+    },
+    "fixed_build": {
+      "command": [
+        "/opt/homebrew/opt/python@3.11/bin/python3.11",
+        "-m",
+        "pip",
+        "wheel",
+        "--no-deps",
+        "--no-build-isolation",
+        "--wheel-dir",
+        "/Users/evanluo/Documents/Github/safe-egress/examples/glances-ssrf/results/full-evaluation/wheels/fixed",
+        "/Users/evanluo/Documents/Github/glances-v4.5.4"
+      ],
+      "cwd": "/Users/evanluo/Documents/Github/safe-egress",
+      "exit_code": 0,
+      "status": "passed",
+      "elapsed_seconds": 0.746
+    },
+    "fixed_ip_plugin_test": {
+      "command": [
+        "python3.13",
+        "-m",
+        "unittest",
+        "test_core.TestGlances.test_012_ip",
+        "-v"
+      ],
+      "cwd": "/Users/evanluo/Documents/Github/glances-v4.5.4/tests",
+      "exit_code": 0,
+      "status": "passed",
+      "elapsed_seconds": 0.29
+    },
+    "fixture_evaluation": {
+      "command": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13",
+        "/Users/evanluo/Documents/Github/safe-egress/examples/glances-ssrf/reproduce.py",
+        "--vulnerable-repo",
+        "/Users/evanluo/Documents/Github/glances-v4.5.3",
+        "--fixed-repo",
+        "/Users/evanluo/Documents/Github/glances-v4.5.4"
+      ],
+      "cwd": "/Users/evanluo/Documents/Github/safe-egress",
+      "exit_code": 0,
+      "status": "passed",
+      "elapsed_seconds": 0.16
+    }
+  },
+  "wheel_artifacts": {
+    "vulnerable": [
+      {
+        "path": "/Users/evanluo/Documents/Github/safe-egress/examples/glances-ssrf/results/full-evaluation/wheels/vulnerable/glances-4.5.3-py3-none-any.whl",
+        "size_bytes": 1001867,
+        "sha256": "3edc8076fbdbcdae94713bcbfe7b5798af003565ad8d577c7444007706330898"
+      }
+    ],
+    "fixed": [
+      {
+        "path": "/Users/evanluo/Documents/Github/safe-egress/examples/glances-ssrf/results/full-evaluation/wheels/fixed/glances-4.5.4-py3-none-any.whl",
+        "size_bytes": 1008964,
+        "sha256": "4a3424a86c54cc9e6dd37311751ae567f4aca0c744660cb3ae8e23cda867db1a"
+      }
+    ]
+  },
+  "execution_time_seconds": 2.497
+}

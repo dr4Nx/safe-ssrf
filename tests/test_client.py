@@ -8,6 +8,7 @@ import zlib
 from unittest.mock import Mock, patch
 
 from safe_egress import (
+    FetchError,
     FetchPolicy,
     FetchResponse,
     PolicyError,
@@ -15,6 +16,7 @@ from safe_egress import (
     RequestTooLargeError,
     ResponseTooLargeError,
     SafeFetcher,
+    ValidatedDestination,
 )
 from safe_egress.client import _PinnedHTTPConnection, _PinnedHTTPSConnection
 
@@ -57,11 +59,64 @@ class SafeFetcherTests(unittest.TestCase):
                 fetcher.get("http://127.0.0.1/internal-status")
         transport.assert_not_called()
 
-    def test_exact_private_host_exception_can_fetch_simulated_service(self) -> None:
+    def test_noncanonical_numeric_ipv4_forms_are_rejected_before_dns(self) -> None:
+        fetcher = SafeFetcher()
+        urls = (
+            "http://127.1/",
+            "http://0177.0.0.1/",
+            "http://0x7f000001/",
+            "http://0x7f.0x0.0x0.0x1/",
+            "http://2130706433/",
+        )
+        with patch("safe_egress.client.socket.getaddrinfo") as resolve:
+            for url in urls:
+                with self.subTest(url=url), self.assertRaises(PolicyError):
+                    fetcher.validate_destination(url)
+        resolve.assert_not_called()
+
+    def test_canonical_public_ipv4_literal_remains_usable_without_dns(self) -> None:
+        fetcher = SafeFetcher()
+        with patch("safe_egress.client.socket.getaddrinfo") as resolve:
+            target = fetcher.validate_destination("http://93.184.216.34/")
+        self.assertEqual(target.addresses, (PUBLIC_IP,))
+        resolve.assert_not_called()
+
+    def test_multicast_literals_are_rejected_before_resolution_or_send(self) -> None:
+        fetcher = SafeFetcher()
+        with patch("safe_egress.client.socket.getaddrinfo") as resolve, patch.object(
+            fetcher, "_send"
+        ) as send:
+            for url in ("http://224.0.0.1/", "http://[ff02::1]/"):
+                with self.subTest(url=url), self.assertRaises(PolicyError):
+                    fetcher.validate_destination(url)
+        resolve.assert_not_called()
+        send.assert_not_called()
+
+    def test_iana_globally_reachable_special_ip_is_accepted_without_dns(self) -> None:
+        fetcher = SafeFetcher()
+        with patch("safe_egress.client.socket.getaddrinfo") as resolve:
+            target = fetcher.validate_destination("https://[2001:1::3]/")
+        self.assertEqual(target.addresses, (ipaddress.ip_address("2001:1::3"),))
+        resolve.assert_not_called()
+
+    def test_iana_non_global_special_literals_are_rejected_before_send(self) -> None:
+        fetcher = SafeFetcher()
+        with patch.object(fetcher, "_send") as send:
+            for url in (
+                "http://192.88.99.1/",
+                "http://[100:0:0:1::1]/",
+                "http://[5f00::1]/",
+                "http://[64:ff9b:1::7f00:1]/",
+            ):
+                with self.subTest(url=url), self.assertRaises(PolicyError):
+                    fetcher.get(url)
+        send.assert_not_called()
+
+    def test_exact_private_ip_exception_can_fetch_simulated_service(self) -> None:
         service = SimulatedService()
         policy = FetchPolicy(
             allowed_hosts=frozenset({"fixture.internal"}),
-            allowed_private_hosts=frozenset({"fixture.internal"}),
+            allowed_ips=frozenset({"127.0.0.1"}),
         )
         fetcher = SafeFetcher(policy)
         with patch("safe_egress.client.socket.getaddrinfo", return_value=resolver_records("127.0.0.1")), patch.object(
@@ -74,8 +129,11 @@ class SafeFetcherTests(unittest.TestCase):
         self.assertEqual(service.requests[0][0].host, "fixture.internal")
         self.assertEqual(service.requests[0][1], ipaddress.ip_address("127.0.0.1"))
 
-    def test_private_exception_does_not_apply_to_another_hostname(self) -> None:
-        policy = FetchPolicy(allowed_private_hosts=frozenset({"trusted.internal"}))
+    def test_ip_exception_still_obeys_exact_host_allowlist(self) -> None:
+        policy = FetchPolicy(
+            allowed_hosts=frozenset({"trusted.internal"}),
+            allowed_ips=frozenset({"127.0.0.1"}),
+        )
         fetcher = SafeFetcher(policy)
         transport = Mock()
         with patch("safe_egress.client.socket.getaddrinfo", return_value=resolver_records("127.0.0.1")), patch.object(
@@ -85,16 +143,49 @@ class SafeFetcherTests(unittest.TestCase):
                 fetcher.get("http://other.internal/")
         transport.assert_not_called()
 
-    def test_private_exception_is_an_explicit_trust_of_exact_hostname(self) -> None:
-        """The exception permits every resolver answer for that exact trusted name."""
-        policy = FetchPolicy(allowed_private_hosts=frozenset({"trusted.internal"}))
+    def test_exact_ip_exception_does_not_allow_other_private_dns_answers(self) -> None:
+        policy = FetchPolicy(
+            allowed_hosts=frozenset({"trusted.internal"}),
+            allowed_ips=frozenset({"127.0.0.1"}),
+        )
         records = resolver_records("127.0.0.1", "169.254.169.254")
         with patch("safe_egress.client.socket.getaddrinfo", return_value=records):
-            self.assertEqual(
-                SafeFetcher(policy)._resolve_and_check("trusted.internal", 80),
-                (ipaddress.ip_address("127.0.0.1"), ipaddress.ip_address("169.254.169.254")),
+            with self.assertRaises(PolicyError):
+                SafeFetcher(policy)._resolve_and_check("trusted.internal", 80)
+
+    def test_exact_ip_exception_allows_known_peer_but_rejects_dns_rebinding(self) -> None:
+        service = SimulatedService()
+        known_peer = ipaddress.ip_address("10.20.0.5")
+        rebound_peer = ipaddress.ip_address("10.20.0.6")
+        policy = FetchPolicy(
+            allowed_hosts=frozenset({"files.internal.example"}),
+            allowed_ips=frozenset({str(known_peer)}),
+        )
+        fetcher = SafeFetcher(policy)
+        resolver = Mock(
+            side_effect=(
+                resolver_records(str(known_peer)),
+                resolver_records(str(rebound_peer)),
             )
-        self.assertFalse(policy.permits_private("other.internal"))
+        )
+        with patch("safe_egress.client.socket.getaddrinfo", resolver), patch.object(
+            fetcher, "_send", side_effect=service.send
+        ):
+            first = fetcher.get("http://files.internal.example/document")
+            with self.assertRaises(PolicyError):
+                fetcher.get("http://files.internal.example/document")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(service.requests[0][1], known_peer)
+        self.assertEqual(len(service.requests), 1)
+
+    def test_exact_ip_exception_rejects_mixed_authorized_and_metadata_answers(self) -> None:
+        known_peer = ipaddress.ip_address("10.20.0.5")
+        records = resolver_records(str(known_peer), "169.254.169.254")
+        policy = FetchPolicy(allowed_ips=frozenset({str(known_peer)}))
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records):
+            with self.assertRaises(PolicyError):
+                SafeFetcher(policy)._resolve_and_check("files.internal.example", 80)
 
     def test_public_resource_utility_path_uses_simulated_public_result(self) -> None:
         service = SimulatedService(
@@ -110,9 +201,199 @@ class SafeFetcherTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.content, b"simulated public page")
         self.assertEqual(result.url, "https://public.example/resource?q=1")
+        self.assertEqual(result.peer_ip, str(PUBLIC_IP))
         self.assertIn(("Content-Type", "text/html"), result.headers)
         self.assertEqual(service.requests[0][1], PUBLIC_IP)
         self.assertEqual(service.requests[0][0].request_target, "/resource?q=1")
+
+    def test_validate_destination_exposes_all_checked_addresses_without_connecting(self) -> None:
+        addresses = (PUBLIC_IP, ipaddress.ip_address("1.1.1.1"))
+        fetcher = SafeFetcher()
+        with patch(
+            "safe_egress.client.socket.getaddrinfo",
+            return_value=resolver_records(*(str(address) for address in addresses)),
+        ), patch.object(fetcher, "_send") as send:
+            target = fetcher.validate_destination("https://PUBLIC.example./a?q=1")
+
+        self.assertEqual(target.scheme, "https")
+        self.assertEqual(target.host, "public.example")
+        self.assertEqual(target.port, 443)
+        self.assertEqual(target.request_target, "/a?q=1")
+        self.assertEqual(target.addresses, addresses)
+        self.assertEqual(target.origin, ("https", "public.example", 443))
+        self.assertIsInstance(target, ValidatedDestination)
+        send.assert_not_called()
+
+    def test_validate_destination_applies_per_call_private_ip_exception(self) -> None:
+        private_ip = ipaddress.ip_address("10.20.0.5")
+        fetcher = SafeFetcher()
+        policy = FetchPolicy(
+            allowed_hosts=frozenset({"files.internal.example"}),
+            allowed_ips=frozenset({private_ip}),
+        )
+        with patch(
+            "safe_egress.client.socket.getaddrinfo",
+            return_value=resolver_records(str(private_ip)),
+        ):
+            target = fetcher.validate_destination(
+                "https://files.internal.example/document",
+                policy=policy,
+            )
+
+        self.assertEqual(target.addresses, (private_ip,))
+
+    def test_validate_destination_rejects_mixed_public_and_private_answers(self) -> None:
+        fetcher = SafeFetcher()
+        with patch(
+            "safe_egress.client.socket.getaddrinfo",
+            return_value=resolver_records(str(PUBLIC_IP), "169.254.169.254"),
+        ):
+            with self.assertRaises(PolicyError):
+                fetcher.validate_destination("http://public.example/")
+
+    def test_validated_dns_address_is_pinned_through_the_request(self) -> None:
+        fetcher = SafeFetcher()
+        resolver = Mock(
+            side_effect=(resolver_records(str(PUBLIC_IP)), resolver_records("127.0.0.1"))
+        )
+        fake_response = Mock(status=200)
+        fake_response.read.return_value = b"PUBLIC_FIXTURE_CONTENT"
+        fake_response.getheaders.return_value = [("Content-Type", "text/plain")]
+        connection = Mock()
+        connection.getresponse.return_value = fake_response
+
+        with patch("safe_egress.client.socket.getaddrinfo", resolver), patch(
+            "safe_egress.client._PinnedHTTPConnection", return_value=connection
+        ) as pinned_connection:
+            result = fetcher.get("http://rebind.example/resource")
+
+        resolver.assert_called_once_with("rebind.example", 80, type=socket.SOCK_STREAM)
+        pinned_connection.assert_called_once_with(
+            "rebind.example", 80, PUBLIC_IP, fetcher.policy.timeout_seconds
+        )
+        connection.request.assert_called_once()
+        self.assertEqual(result.peer_ip, str(PUBLIC_IP))
+        self.assertEqual(result.content, b"PUBLIC_FIXTURE_CONTENT")
+
+    def test_connection_failure_falls_back_to_another_validated_address(self) -> None:
+        fetcher = SafeFetcher()
+        first_ip = ipaddress.ip_address("2606:4700:4700::1111")
+        second_ip = ipaddress.ip_address("93.184.216.34")
+        records = resolver_records(str(first_ip), str(second_ip))
+
+        first_connection = Mock()
+        first_connection.connect.side_effect = OSError("synthetic connect failure")
+        second_connection = Mock()
+        fake_response = Mock(status=200)
+        fake_response.read.return_value = b"PUBLIC_FIXTURE_CONTENT"
+        fake_response.getheaders.return_value = [("Content-Type", "text/plain")]
+        second_connection.getresponse.return_value = fake_response
+
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch(
+            "safe_egress.client._PinnedHTTPConnection",
+            side_effect=(first_connection, second_connection),
+        ):
+            result = fetcher.get("http://public.example/resource")
+
+        first_connection.request.assert_not_called()
+        second_connection.connect.assert_called_once()
+        second_connection.request.assert_called_once()
+        second_connection.sock.settimeout.assert_called_once_with(fetcher.policy.timeout_seconds)
+        self.assertEqual(second_connection.timeout, fetcher.policy.timeout_seconds)
+        self.assertEqual(result.content, b"PUBLIC_FIXTURE_CONTENT")
+        self.assertEqual(result.peer_ip, str(second_ip))
+
+    def test_address_fallback_shares_one_connection_timeout_budget(self) -> None:
+        fetcher = SafeFetcher(FetchPolicy(timeout_seconds=5.0))
+        records = resolver_records(
+            "2606:4700:4700::1111",
+            "2606:4700:4700::1112",
+            "93.184.216.34",
+        )
+        first_connection = Mock()
+        first_connection.connect.side_effect = OSError("synthetic connect failure")
+        second_connection = Mock()
+        observed_second_timeout: list[float] = []
+
+        def fail_second_connect() -> None:
+            observed_second_timeout.append(second_connection.timeout)
+            raise OSError("synthetic connect failure")
+
+        second_connection.connect.side_effect = fail_second_connect
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch(
+            "safe_egress.client._PinnedHTTPConnection",
+            side_effect=(first_connection, second_connection),
+        ) as connection_factory, patch(
+            "safe_egress.client.time.monotonic", side_effect=(0.0, 0.0, 1.0, 5.0)
+        ):
+            with self.assertRaises(FetchError):
+                fetcher.get("http://public.example/resource")
+
+        self.assertEqual(connection_factory.call_count, 2)
+        self.assertEqual(observed_second_timeout, [4.0])
+
+    def test_request_failure_does_not_retry_on_another_address(self) -> None:
+        fetcher = SafeFetcher()
+        records = resolver_records("2606:4700:4700::1111", str(PUBLIC_IP))
+        connection = Mock()
+        connection.request.side_effect = OSError("synthetic write failure")
+
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch(
+            "safe_egress.client._PinnedHTTPConnection", return_value=connection
+        ) as connection_factory:
+            with self.assertRaises(FetchError):
+                fetcher.get("http://public.example/resource")
+
+        connection.connect.assert_called_once()
+        connection.request.assert_called_once()
+        connection_factory.assert_called_once()
+
+    def test_pinned_connection_connects_to_numeric_ipv4_and_ipv6_without_dns(self) -> None:
+        cases = (
+            (ipaddress.ip_address("93.184.216.34"), socket.AF_INET, ("93.184.216.34", 8080)),
+            (ipaddress.ip_address("2606:4700:4700::1111"), socket.AF_INET6,
+             ("2606:4700:4700::1111", 8443, 0, 0)),
+        )
+        for pinned_ip, expected_family, expected_sockaddr in cases:
+            with self.subTest(pinned_ip=pinned_ip):
+                connection = object.__new__(_PinnedHTTPConnection)
+                connection._safe_egress_ip = pinned_ip
+                with patch("safe_egress.client.socket.socket") as socket_factory, patch(
+                    "safe_egress.client.socket.getaddrinfo"
+                ) as resolve:
+                    sock = socket_factory.return_value
+                    returned = connection._create_pinned_connection(
+                        ("untrusted.example", expected_sockaddr[1]), timeout=2
+                    )
+
+                self.assertIs(returned, sock)
+                socket_factory.assert_called_once_with(expected_family, socket.SOCK_STREAM)
+                sock.settimeout.assert_called_once_with(2)
+                sock.connect.assert_called_once_with(expected_sockaddr)
+                resolve.assert_not_called()
+
+    def test_pinned_https_connects_to_numeric_ip_but_keeps_tls_hostname(self) -> None:
+        pinned_ip = ipaddress.ip_address("93.184.216.34")
+        raw_socket = Mock()
+        tls_socket = Mock()
+        tls_context = Mock()
+        tls_context.wrap_socket.return_value = tls_socket
+        connection = _PinnedHTTPSConnection(
+            "tls-public.example", 443, pinned_ip, 2, tls_context
+        )
+
+        with patch("safe_egress.client.socket.socket", return_value=raw_socket) as socket_factory, patch(
+            "safe_egress.client.socket.getaddrinfo"
+        ) as resolve:
+            connection.connect()
+
+        socket_factory.assert_called_once_with(socket.AF_INET, socket.SOCK_STREAM)
+        raw_socket.connect.assert_called_once_with(("93.184.216.34", 443))
+        tls_context.wrap_socket.assert_called_once_with(
+            raw_socket, server_hostname="tls-public.example"
+        )
+        self.assertIs(connection.sock, tls_socket)
+        resolve.assert_not_called()
 
     def test_request_method_and_bounded_body_reach_the_pinned_transport(self) -> None:
         fetcher = SafeFetcher()
@@ -223,7 +504,12 @@ class SafeFetcherTests(unittest.TestCase):
 
     def test_redirect_to_prohibited_loopback_is_rejected_before_second_request(self) -> None:
         first = SimulatedService(status=302, headers=(("Location", "http://127.0.0.1/internal"),))
-        fetcher = SafeFetcher(FetchPolicy(allowed_private_hosts=frozenset({"start.internal"})))
+        fetcher = SafeFetcher(
+            FetchPolicy(
+                allowed_hosts=frozenset({"start.internal"}),
+                allowed_ips=frozenset({"127.0.0.1"}),
+            )
+        )
         with patch("safe_egress.client.socket.getaddrinfo", return_value=resolver_records("127.0.0.1")), patch.object(
             fetcher, "_send", side_effect=first.send
         ):
@@ -231,11 +517,29 @@ class SafeFetcherTests(unittest.TestCase):
                 fetcher.get("http://start.internal/start")
         self.assertEqual(len(first.requests), 1)
 
+    def test_scheme_relative_redirect_to_loopback_is_rejected_before_second_request(self) -> None:
+        first = SimulatedService(status=302, headers=(("Location", "//127.0.0.1/internal"),))
+        fetcher = SafeFetcher()
+        resolver = Mock(return_value=resolver_records(str(PUBLIC_IP)))
+        with patch("safe_egress.client.socket.getaddrinfo", resolver), patch.object(
+            fetcher, "_send", side_effect=first.send
+        ) as send:
+            with self.assertRaises(PolicyError):
+                fetcher.get("http://public.example/start")
+
+        resolver.assert_called_once_with("public.example", 80, type=socket.SOCK_STREAM)
+        self.assertEqual(len(first.requests), 1)
+        send.assert_called_once()
+
     def test_redirects_are_revalidated_and_cross_origin_credentials_removed(self) -> None:
         source = SimulatedService(status=302, headers=(("Location", "http://second.internal/end"),))
         destination = SimulatedService(body=b"destination response")
         allowed = {"first.internal", "second.internal"}
-        policy = FetchPolicy(allowed_private_hosts=frozenset(allowed))
+        policy = FetchPolicy(
+            allowed_hosts=frozenset(allowed),
+            allowed_ips=frozenset({"127.0.0.1"}),
+            additional_sensitive_headers=frozenset({"X-Company-Secret"}),
+        )
         fetcher = SafeFetcher(policy)
 
         def send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
@@ -246,19 +550,68 @@ class SafeFetcherTests(unittest.TestCase):
         ):
             result = fetcher.get(
                 "http://first.internal/start",
-                headers={"Authorization": "Bearer dummy", "Cookie": "session=dummy", "Origin": "http://first.internal"},
+                headers={
+                    "Authorization": "Bearer dummy",
+                    "Cookie": "session=dummy",
+                    "Origin": "http://first.internal",
+                    "Referer": "http://first.internal/page?token=dummy",
+                    "X-API-Key": "dummy-api-key",
+                    "X-Aws-Ec2-Metadata-Token": "dummy-imdsv2-token",
+                    "X-Vault-Token": "dummy-vault-token",
+                    "X-Company-Secret": "dummy-custom-secret",
+                },
             )
 
         self.assertEqual(result.content, b"destination response")
         self.assertEqual(result.history, ("http://first.internal/start",))
         self.assertIn("Authorization", source.requests[0][2])
-        for sensitive in ("authorization", "cookie", "origin"):
+        for sensitive in (
+            "authorization",
+            "cookie",
+            "origin",
+            "referer",
+            "x-api-key",
+            "x-aws-ec2-metadata-token",
+            "x-vault-token",
+            "x-company-secret",
+        ):
             self.assertNotIn(sensitive, {key.lower() for key in destination.requests[0][2]})
+
+    def test_peer_ip_reports_the_final_redirect_connection(self) -> None:
+        first_ip = ipaddress.ip_address("93.184.216.34")
+        final_ip = ipaddress.ip_address("1.1.1.1")
+        source = SimulatedService(status=302, headers=(("Location", "https://second.example/final"),))
+        destination = SimulatedService(body=b"final public response")
+        fetcher = SafeFetcher(FetchPolicy(allowed_hosts=frozenset({"first.example", "second.example"})))
+
+        def resolve(host, port, *, type):
+            del port, type
+            address = first_ip if host == "first.example" else final_ip
+            return resolver_records(str(address))
+
+        def send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            service = source if target.host == "first.example" else destination
+            return service.send(target, address, headers, method=method, body=body, timeout_seconds=timeout_seconds)
+
+        with patch("safe_egress.client.socket.getaddrinfo", side_effect=resolve), patch.object(
+            fetcher, "_send", side_effect=send
+        ):
+            result = fetcher.get("https://first.example/start")
+
+        self.assertEqual(result.content, b"final public response")
+        self.assertEqual(source.requests[0][1], first_ip)
+        self.assertEqual(destination.requests[0][1], final_ip)
+        self.assertEqual(result.peer_ip, str(final_ip))
 
     def test_same_origin_redirect_preserves_caller_headers(self) -> None:
         source = SimulatedService(status=302, headers=(("Location", "/next"),))
         destination = SimulatedService(body=b"done")
-        fetcher = SafeFetcher(FetchPolicy(allowed_private_hosts=frozenset({"same.internal"})))
+        fetcher = SafeFetcher(
+            FetchPolicy(
+                allowed_hosts=frozenset({"same.internal"}),
+                allowed_ips=frozenset({"127.0.0.1"}),
+            )
+        )
 
         def send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
             return (source if target.request_target == "/start" else destination).send(target, address, headers)
@@ -266,13 +619,32 @@ class SafeFetcherTests(unittest.TestCase):
         with patch("safe_egress.client.socket.getaddrinfo", return_value=resolver_records("127.0.0.1")), patch.object(
             fetcher, "_send", side_effect=send
         ):
-            fetcher.get("http://same.internal/start", headers={"Authorization": "Bearer dummy", "Cookie": "dummy"})
+            fetcher.get(
+                "http://same.internal/start",
+                headers={
+                    "Authorization": "Bearer dummy",
+                    "Cookie": "dummy",
+                    "Referer": "http://same.internal/page?token=dummy",
+                    "X-API-Key": "dummy-api-key",
+                },
+            )
         self.assertEqual(destination.requests[0][2]["Authorization"], "Bearer dummy")
         self.assertEqual(destination.requests[0][2]["Cookie"], "dummy")
+        self.assertEqual(
+            destination.requests[0][2]["Referer"],
+            "http://same.internal/page?token=dummy",
+        )
+        self.assertEqual(destination.requests[0][2]["X-API-Key"], "dummy-api-key")
 
     def test_redirect_limit_is_enforced(self) -> None:
         loop = SimulatedService(status=302, headers=(("Location", "/again"),))
-        fetcher = SafeFetcher(FetchPolicy(allowed_private_hosts=frozenset({"loop.internal"}), max_redirects=1))
+        fetcher = SafeFetcher(
+            FetchPolicy(
+                allowed_hosts=frozenset({"loop.internal"}),
+                allowed_ips=frozenset({"127.0.0.1"}),
+                max_redirects=1,
+            )
+        )
         with patch("safe_egress.client.socket.getaddrinfo", return_value=resolver_records("127.0.0.1")), patch.object(
             fetcher, "_send", side_effect=loop.send
         ):

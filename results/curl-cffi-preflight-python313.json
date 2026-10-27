@@ -1,0 +1,46 @@
+{
+  "python": "3.13.0",
+  "executable": "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13",
+  "curl_cffi": {
+    "importable": false,
+    "version": null,
+    "error": "ModuleNotFoundError: No module named 'curl_cffi'"
+  },
+  "system_libcurl_callback_check": {
+    "available": true,
+    "library": "/usr/lib/libcurl.dylib",
+    "version": "libcurl/8.7.1 (SecureTransport) LibreSSL/3.3.6 zlib/1.2.12 nghttp2/1.68.1",
+    "prereq_setopt_accepted": true,
+    "setopt_return_code": 0,
+    "manual_callback_results": {
+      "allowed_peer": 0,
+      "denied_peer": 1
+    },
+    "transfer_performed": false,
+    "socket_opened": false,
+    "error": null
+  },
+  "cffi_system_libcurl_callback_check": {
+    "available": true,
+    "setopt_return_code": 0,
+    "accepted": true,
+    "transfer_performed": false,
+    "socket_opened": false,
+    "error": null
+  },
+  "loopback_bind": {
+    "127.0.0.1": {
+      "allowed": false,
+      "error": "PermissionError: [Errno 1] Operation not permitted"
+    },
+    "127.0.0.2": {
+      "allowed": false,
+      "error": "PermissionError: [Errno 1] Operation not permitted"
+    }
+  },
+  "unix_socket_bind": {
+    "allowed": false,
+    "error": "PermissionError: [Errno 1] Operation not permitted"
+  },
+  "network_requests_sent": false
+}

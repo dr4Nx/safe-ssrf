@@ -128,6 +128,26 @@ opener.open(user_url)
         self.assertEqual(len(findings), 4)
         self.assertTrue(all(finding.policy_bound for finding in findings))
 
+    def test_recognizes_requests_compat_module_calls_and_sessions(self) -> None:
+        source = """
+import safe_egress.requests_compat as requests
+from safe_egress.requests_compat import get as safe_get
+
+requests.get(user_url)
+safe_get(user_url)
+with requests.Session() as client:
+    client.get(user_url)
+session = requests.session()
+session.post(user_url)
+"""
+        findings = scan_source(source, "compat.py")
+        self.assertEqual(len(findings), 4)
+        self.assertTrue(all(finding.policy_bound for finding in findings))
+        self.assertEqual(
+            [finding.call.rsplit(".", 1)[-1] for finding in findings],
+            ["get", "get", "get", "post"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

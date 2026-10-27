@@ -117,6 +117,49 @@ class SafeUrllib3ClientTests(unittest.TestCase):
 
         self.assertEqual(sent, ["https://public.example/start"])
 
+    def test_cross_origin_redirect_strips_configured_secret_headers(self) -> None:
+        from safe_egress.urllib3_adapter import SafeUrllib3Client
+
+        policy = FetchPolicy(additional_sensitive_headers=frozenset({"X-Company-Secret"}))
+        client = SafeUrllib3Client(policy=policy)
+        sent: list[tuple[str, dict[str, str]]] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, body, timeout_seconds
+            sent.append((target.url, {name.lower(): value for name, value in headers.items()}))
+            if target.host == "public.example":
+                return FetchResponse(
+                    302,
+                    (("Location", "https://other.example/next"),),
+                    b"",
+                    target.url,
+                    (),
+                    method,
+                )
+            return FetchResponse(200, (), b"PUBLIC_FIXTURE_CONTENT", target.url, (), method)
+
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 443))]
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            client.fetcher, "_send", side_effect=simulated_send
+        ):
+            response = client.request(
+                "GET",
+                "https://public.example/start",
+                headers={
+                    "X-API-Key": "dummy-api-key",
+                    "X-Aws-Ec2-Metadata-Token": "dummy-imdsv2-token",
+                    "X-Company-Secret": "dummy-secret",
+                },
+            )
+
+        self.assertEqual(response.data, b"PUBLIC_FIXTURE_CONTENT")
+        self.assertIn("x-api-key", sent[0][1])
+        self.assertIn("x-aws-ec2-metadata-token", sent[0][1])
+        self.assertIn("x-company-secret", sent[0][1])
+        self.assertNotIn("x-api-key", sent[1][1])
+        self.assertNotIn("x-aws-ec2-metadata-token", sent[1][1])
+        self.assertNotIn("x-company-secret", sent[1][1])
+
     def test_json_body_and_policy_supported_request_options(self) -> None:
         from safe_egress.urllib3_adapter import SafeUrllib3Client
 
@@ -146,6 +189,63 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         self.assertEqual(calls[0][2], "application/json")
         self.assertEqual(calls[0][3], 2)
 
+    def test_per_request_policy_override_is_rechecked_for_request(self) -> None:
+        from safe_egress.urllib3_adapter import SafeUrllib3Client, SafeUrllib3Error
+
+        client = SafeUrllib3Client()
+        policy = FetchPolicy(
+            allowed_ips=frozenset({"127.0.0.1"}),
+            allowed_ports=frozenset({80}),
+        )
+        local_ip = ipaddress.ip_address("127.0.0.1")
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None, **kwargs):
+            del headers, body, timeout_seconds, kwargs
+            self.assertEqual(address, local_ip)
+            return FetchResponse(200, (), b"CONTROLLED_LOCAL_FIXTURE", target.url, (), method)
+
+        with patch.object(client.fetcher, "_send", side_effect=simulated_send):
+            response = client.request(
+                "GET", "http://127.0.0.1/status", policy=policy
+            )
+            with self.assertRaises(SafeUrllib3Error):
+                client.request("GET", "http://127.0.0.1/status")
+
+        self.assertEqual(response.data, b"CONTROLLED_LOCAL_FIXTURE")
+
+    def test_urllib3_compat_pool_manager_accepts_per_request_policy(self) -> None:
+        from safe_egress.urllib3_compat import PoolManager
+
+        manager = PoolManager()
+        policy = FetchPolicy(
+            allowed_ips=frozenset({"127.0.0.1"}),
+            allowed_ports=frozenset({80}),
+        )
+        local_ip = ipaddress.ip_address("127.0.0.1")
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None, **kwargs):
+            del headers, body, timeout_seconds, kwargs
+            self.assertEqual(address, local_ip)
+            return FetchResponse(200, (), b"CONTROLLED_LOCAL_FIXTURE", target.url, (), method)
+
+        with patch.object(manager._client.fetcher, "_send", side_effect=simulated_send):
+            response = manager.request(
+                "GET", "http://127.0.0.1/status", policy=policy
+            )
+
+        self.assertEqual(response.data, b"CONTROLLED_LOCAL_FIXTURE")
+
+    def test_per_request_policy_applies_its_request_body_limit(self) -> None:
+        from safe_egress.errors import RequestTooLargeError
+        from safe_egress.urllib3_adapter import SafeUrllib3Client
+
+        client = SafeUrllib3Client()
+        policy = FetchPolicy(max_request_bytes=4)
+        with patch.object(client.fetcher, "_send") as send:
+            with self.assertRaises(RequestTooLargeError):
+                client.request("POST", "https://public.example/upload", body=b"12345", policy=policy)
+        send.assert_not_called()
+
     def test_unsupported_bypass_or_streaming_options_fail_closed(self) -> None:
         from safe_egress.urllib3_adapter import SafeUrllib3Client
 
@@ -158,3 +258,61 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         ):
             with self.subTest(options=options), self.assertRaises(PolicyError):
                 client.request("GET", "https://public.example/", **options)
+
+    def test_urllib3_compat_pool_manager_blocks_loopback_redirect(self) -> None:
+        from safe_egress.urllib3_compat import PoolManager
+
+        manager = PoolManager()
+        sent: list[str] = []
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, headers, body, timeout_seconds
+            sent.append(target.url)
+            return FetchResponse(
+                302,
+                (("Location", "http://127.0.0.1/internal-status"),),
+                b"",
+                target.url,
+                (),
+                method,
+            )
+
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 80))]
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            manager._client.fetcher, "_send", side_effect=simulated_send
+        ):
+            with self.assertRaises(urllib3.exceptions.HTTPError):
+                manager.request("GET", "http://public.example/start")
+
+        self.assertEqual(sent, ["http://public.example/start"])
+
+    def test_urllib3_compat_public_fetch_and_unknown_pool_options(self) -> None:
+        from safe_egress.urllib3_compat import PoolManager, request as urllib3_request
+
+        with self.assertRaises(PolicyError):
+            PoolManager(retries=0)
+
+        manager = PoolManager()
+        records = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 80))]
+
+        def simulated_send(target, address, headers, *, method="GET", body=None, timeout_seconds=None):
+            del address, headers, body, timeout_seconds
+            return FetchResponse(200, (), b"PUBLIC_FIXTURE_CONTENT", target.url, (), method)
+
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch.object(
+            manager._client.fetcher, "_send", side_effect=simulated_send
+        ):
+            response = manager.request("GET", "http://public.example/document")
+
+        self.assertEqual(response.data, b"PUBLIC_FIXTURE_CONTENT")
+
+        with patch("safe_egress.client.socket.getaddrinfo", return_value=records), patch(
+            "safe_egress.client.SafeFetcher._send", side_effect=simulated_send
+        ):
+            module_response = urllib3_request(
+                "GET",
+                "http://public.example/module-level",
+                policy=FetchPolicy(allowed_hosts=frozenset({"public.example"})),
+            )
+
+        self.assertEqual(module_response.data, b"PUBLIC_FIXTURE_CONTENT")

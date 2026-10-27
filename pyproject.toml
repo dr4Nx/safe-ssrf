@@ -24,10 +24,15 @@ classifiers = [
 safe-egress-audit = "safe_egress.audit:main"
 
 [project.optional-dependencies]
+test = ["pytest>=7.4,<9"]
 requests = ["requests>=2.31,<3"]
 httpx = ["httpx>=0.27,<1"]
 aiohttp = ["aiohttp>=3.9,<4"]
 urllib3 = ["urllib3>=2,<3"]
+curl-cffi = ["curl-cffi==0.15.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

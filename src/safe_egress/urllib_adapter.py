@@ -52,11 +52,15 @@ class SafeUrllibOpener:
     ):
         """Open an HTTP(S) URL or prepared ``urllib.request.Request`` safely."""
         context = kwargs.pop("context", None)
+        policy = kwargs.pop("policy", None)
         if context is not None:
             raise PolicyError("Custom TLS contexts are unsupported by SafeUrllibOpener")
         if kwargs:
             unsupported = ", ".join(sorted(kwargs))
             raise PolicyError(f"Unsupported urllib.request options: {unsupported}")
+        if policy is not None and not isinstance(policy, FetchPolicy):
+            raise PolicyError("policy must be a FetchPolicy")
+        active_policy = self.fetcher.policy if policy is None else policy
 
         if isinstance(fullurl, urllib.request.Request):
             request = fullurl
@@ -65,7 +69,7 @@ class SafeUrllibOpener:
         else:
             request = urllib.request.Request(fullurl, data=data)
 
-        body = self._body_bytes(request.data)
+        body = self._body_bytes(request.data, active_policy.max_request_bytes)
         timeout_seconds = self._timeout_seconds(timeout)
         headers = dict(request.header_items())
         try:
@@ -75,6 +79,7 @@ class SafeUrllibOpener:
                 headers=headers,
                 body=body,
                 timeout_seconds=timeout_seconds,
+                policy=policy,
             )
         except FetchError as exc:
             raise SafeUrllibError(str(exc)) from exc
@@ -98,10 +103,10 @@ class SafeUrllibOpener:
             )
         return response
 
-    def _body_bytes(self, body: Any) -> bytes | None:
+    def _body_bytes(self, body: Any, limit: int | None = None) -> bytes | None:
         if body is None:
             return None
-        limit = self.fetcher.policy.max_request_bytes
+        limit = self.fetcher.policy.max_request_bytes if limit is None else limit
         if isinstance(body, bytes):
             result = body
         elif isinstance(body, str):
