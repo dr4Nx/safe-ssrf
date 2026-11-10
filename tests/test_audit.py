@@ -51,8 +51,8 @@ urllib3.request('GET', user_url)
     def test_distinguishes_policy_bound_clients_from_raw_sessions(self) -> None:
         source = """
 import requests
-import safe_egress.requests_adapter as safe_requests
-from safe_egress.httpx_adapter import SafeAsyncClient as SafeHTTPX
+import safe_egress.adapters.requests as safe_requests
+from safe_egress.adapters.httpx import SafeAsyncClient as SafeHTTPX
 
 with safe_requests.SafeRequestsSession() as safe_session:
     safe_session.get(user_url)
@@ -71,7 +71,7 @@ raw_session.get(user_url)
     def test_tracks_sessions_assigned_to_instance_attributes(self) -> None:
         source = """
 import requests
-from safe_egress.requests_adapter import SafeRequestsSession
+from safe_egress.adapters.requests import SafeRequestsSession
 
 class Fetcher:
     def __init__(self):
@@ -84,7 +84,7 @@ class Fetcher:
 """
         findings = scan_source(source, "sample.py")
         self.assertEqual([finding.call for finding in findings], [
-            "requests.Session.get", "safe_egress.requests_adapter.SafeRequestsSession.post"
+            "requests.Session.get", "safe_egress.adapters.requests.SafeRequestsSession.post"
         ])
         self.assertEqual([finding.policy_bound for finding in findings], [False, True])
 
@@ -111,9 +111,9 @@ class Fetcher:
     def test_recognizes_all_safe_client_wrappers(self) -> None:
         source = """
 from safe_egress import SafeFetcher
-from safe_egress.aiohttp_adapter import safe_aiohttp_session
-from safe_egress.urllib3_adapter import SafeUrllib3Client
-from safe_egress.urllib_adapter import SafeUrllibOpener
+from safe_egress.adapters.aiohttp import safe_aiohttp_session
+from safe_egress.adapters.urllib3 import SafeUrllib3Client
+from safe_egress.adapters.urllib import SafeUrllibOpener
 
 fetcher = SafeFetcher()
 fetcher.get(user_url)
@@ -130,8 +130,8 @@ opener.open(user_url)
 
     def test_recognizes_requests_compat_module_calls_and_sessions(self) -> None:
         source = """
-import safe_egress.requests_compat as requests
-from safe_egress.requests_compat import get as safe_get
+import safe_egress.adapters.requests as requests
+from safe_egress.adapters.requests import get as safe_get
 
 requests.get(user_url)
 safe_get(user_url)

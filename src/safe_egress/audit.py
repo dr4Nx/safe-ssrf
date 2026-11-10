@@ -72,15 +72,17 @@ def _client_variables(tree: ast.Module, modules: dict[str, str], symbols: dict[s
     safe_constructors = {
         "safe_egress.SafeFetcher",
         "safe_egress.client.SafeFetcher",
-        "safe_egress.requests_adapter.SafeRequestsSession",
-        "safe_egress.requests_compat.Session",
-        "safe_egress.requests_compat.SafeRequestsSession",
-        "safe_egress.requests_compat.session",
-        "safe_egress.httpx_adapter.SafeClient",
-        "safe_egress.httpx_adapter.SafeAsyncClient",
-        "safe_egress.aiohttp_adapter.safe_aiohttp_session",
-        "safe_egress.urllib3_adapter.SafeUrllib3Client",
-        "safe_egress.urllib_adapter.SafeUrllibOpener",
+        "safe_egress.adapters.requests.SafeRequestsSession",
+        "safe_egress.adapters.requests.Session",
+        "safe_egress.adapters.requests.session",
+        "safe_egress.adapters.httpx.SafeClient",
+        "safe_egress.adapters.httpx.SafeAsyncClient",
+        "safe_egress.adapters.aiohttp.safe_aiohttp_session",
+        "safe_egress.adapters.urllib3.SafeUrllib3Client",
+        "safe_egress.adapters.urllib3.PoolManager",
+        "safe_egress.adapters.urllib3.request",
+        "safe_egress.adapters.urllib.SafeUrllibOpener",
+        "safe_egress.adapters.curl_cffi.SafeCurlCffiSession",
     }
 
     def constructor_kind(value: ast.AST) -> str | None:
@@ -197,7 +199,7 @@ def scan_source(source: str, path: str = "<string>") -> list[AuditFinding]:
         elif root in {"requests", "httpx"} and parts[-1] in _REQUEST_METHODS:
             findings.append(AuditFinding(path, node.lineno, name))
         elif (
-            name.startswith("safe_egress.requests_compat.")
+            name.startswith("safe_egress.adapters.requests.")
             and parts[-1] in {"request", "get", "options", "head", "post", "put", "patch", "delete"}
         ):
             # The module-level Requests-shaped facade creates a fresh safe

@@ -1,4 +1,8 @@
-"""Requests Session and transport adapter backed by ``SafeFetcher``."""
+"""Requests integrations backed by ``SafeFetcher``.
+
+Use :class:`SafeRequestsSession` for a persistent Session or the module-level
+``get``/``post`` helpers as a small requests-shaped facade.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,7 @@ from datetime import timedelta
 from email.message import Message
 from io import BytesIO
 import math
+import ipaddress
 from types import MappingProxyType
 from types import SimpleNamespace
 from typing import Any
@@ -18,9 +23,9 @@ try:
 except ImportError as exc:  # pragma: no cover - depends on optional extra
     raise ImportError("SafeRequestsSession requires the optional 'requests' dependency") from exc
 
-from ..client import SafeFetcher
-from ..errors import FetchError, PolicyError, RequestTooLargeError
-from ..policy import FetchPolicy, normalize_host
+from ...client import SafeFetcher
+from ...errors import FetchError, PolicyError, RequestTooLargeError
+from ...policy import FetchPolicy, normalize_host
 
 _REQUEST_POLICY: ContextVar[FetchPolicy | None] = ContextVar("safe_egress_requests_policy", default=None)
 
@@ -250,3 +255,110 @@ class SafeRequestsSession(requests.Session):
             for name in tuple(prepared_request.headers):
                 if name.lower() in policy.redirect_sensitive_headers:
                     prepared_request.headers.pop(name, None)
+
+
+# Requests-shaped import facade. These names intentionally share this package
+# with SafeRequestsSession so one backend has one implementation file.
+Session = SafeRequestsSession
+Request = requests.Request
+PreparedRequest = requests.PreparedRequest
+Response = requests.Response
+exceptions = requests.exceptions
+ConnectTimeout = requests.ConnectTimeout
+ConnectionError = requests.ConnectionError
+FileModeWarning = requests.FileModeWarning
+HTTPError = requests.HTTPError
+JSONDecodeError = requests.JSONDecodeError
+ReadTimeout = requests.ReadTimeout
+RequestException = requests.RequestException
+Timeout = requests.Timeout
+TooManyRedirects = requests.TooManyRedirects
+URLRequired = requests.URLRequired
+
+
+def Allow(*destinations: str) -> FetchPolicy:
+    """Build a policy for exact hostnames and IP addresses only."""
+    hosts: set[str] = set()
+    addresses: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
+    for destination in destinations:
+        if not isinstance(destination, str):
+            raise ValueError("Allow destinations must be hostname or IP strings")
+        host = normalize_host(destination)
+        hosts.add(host)
+        try:
+            addresses.add(ipaddress.ip_address(host))
+        except ValueError:
+            continue
+    return FetchPolicy(allowed_hosts=frozenset(hosts), allowed_ips=frozenset(addresses))
+
+
+def request(method: str, url: str, **kwargs: Any) -> Response:
+    """Send a request using a fresh policy-bound session."""
+    with SafeRequestsSession() as session:
+        return session.request(method, url, **kwargs)
+
+
+def session() -> SafeRequestsSession:
+    """Create a persistent policy-bound session."""
+    return SafeRequestsSession()
+
+
+def get(url: str, params: Any = None, **kwargs: Any) -> Response:
+    return request("get", url, params=params, **kwargs)
+
+
+def options(url: str, **kwargs: Any) -> Response:
+    return request("options", url, **kwargs)
+
+
+def head(url: str, **kwargs: Any) -> Response:
+    kwargs.setdefault("allow_redirects", False)
+    return request("head", url, **kwargs)
+
+
+def post(url: str, data: Any = None, json: Any = None, **kwargs: Any) -> Response:
+    return request("post", url, data=data, json=json, **kwargs)
+
+
+def put(url: str, data: Any = None, **kwargs: Any) -> Response:
+    return request("put", url, data=data, **kwargs)
+
+
+def patch(url: str, data: Any = None, **kwargs: Any) -> Response:
+    return request("patch", url, data=data, **kwargs)
+
+
+def delete(url: str, **kwargs: Any) -> Response:
+    return request("delete", url, **kwargs)
+
+
+__all__ = [
+    "Allow",
+    "ConnectTimeout",
+    "ConnectionError",
+    "FileModeWarning",
+    "FetchPolicy",
+    "HTTPError",
+    "JSONDecodeError",
+    "PreparedRequest",
+    "ReadTimeout",
+    "Request",
+    "RequestException",
+    "Response",
+    "SafeRequestsAdapter",
+    "SafeRequestsSession",
+    "Session",
+    "Timeout",
+    "TooManyRedirects",
+    "URLRequired",
+    "delete",
+    "exceptions",
+    "get",
+    "head",
+    "options",
+    "patch",
+    "post",
+    "put",
+    "request",
+    "session",
+]

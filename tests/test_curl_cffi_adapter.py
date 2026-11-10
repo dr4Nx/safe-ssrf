@@ -17,7 +17,7 @@ from safe_egress import (
     SafeFetcher,
     ValidatedDestination,
 )
-from safe_egress import curl_cffi_adapter
+from safe_egress.adapters import curl_cffi as curl_cffi_adapter
 
 
 class _FakeResponse:
@@ -113,7 +113,7 @@ class _FakeCurlRequests:
             response = _FakeCurlRequests.responses.pop(0)
             opensocket = self.curl.options[curl_cffi_adapter._CURL_OPENSOCKETFUNCTION]
             address = _fake_curl_sockaddr(response.primary_ip, response.primary_port)
-            with patch("safe_egress.curl_cffi_adapter.socket.socket") as socket_factory:
+            with patch("safe_egress.adapters.curl_cffi.socket.socket") as socket_factory:
                 socket_factory.return_value.detach.return_value = 41
                 socket_result = opensocket(None, 0, address)
                 _FakeCurlRequests.socket_open_outcomes.append(
@@ -295,7 +295,7 @@ class SafeCurlCffiSessionTests(unittest.TestCase):
         callback = _FakeCurlRequests.instances[0].curl.options[
             curl_cffi_adapter._CURL_OPENSOCKETFUNCTION
         ]
-        with patch("safe_egress.curl_cffi_adapter.socket.socket") as socket_factory:
+        with patch("safe_egress.adapters.curl_cffi.socket.socket") as socket_factory:
             result = callback(
                 None,
                 0,

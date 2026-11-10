@@ -1,4 +1,4 @@
-"""A narrow urllib3-style client backed by SafeFetcher.
+"""urllib3 client and import facade backed by SafeFetcher.
 
 This is a facade for common ``PoolManager.request`` call sites, not a
 ``PoolManager`` subclass. It intentionally does not expose pools, connection
@@ -18,9 +18,9 @@ try:
 except ImportError as exc:  # pragma: no cover - depends on optional extra
     raise ImportError("SafeUrllib3Client requires the optional 'urllib3' dependency") from exc
 
-from ..client import SafeFetcher
-from ..errors import FetchError, PolicyError, RequestTooLargeError
-from ..policy import FetchPolicy
+from ...client import SafeFetcher
+from ...errors import FetchError, PolicyError, RequestTooLargeError
+from ...policy import FetchPolicy
 
 
 class SafeUrllib3Error(urllib3.exceptions.HTTPError):
@@ -127,3 +127,53 @@ class SafeUrllib3Client:
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool):
             raise PolicyError("timeout must be a positive number or None")
         return float(timeout)
+
+
+# PoolManager-shaped facade kept beside the urllib3 client implementation.
+exceptions = urllib3.exceptions
+
+
+class PoolManager:
+    """Small safe facade for common ``urllib3.PoolManager`` call sites."""
+
+    def __init__(self, *args: Any, policy: FetchPolicy | None = None, **kwargs: Any) -> None:
+        if args or kwargs:
+            unsupported = ", ".join(sorted(kwargs))
+            if args:
+                unsupported = (unsupported + ", " if unsupported else "") + "positional arguments"
+            raise PolicyError(f"Unsupported urllib3 PoolManager options: {unsupported}")
+        self._client = SafeUrllib3Client(policy=policy)
+
+    def request(self, method: str, url: str, **kwargs: Any) -> HTTPResponse:
+        return self._client.request(method, url, **kwargs)
+
+    def urlopen(self, method: str, url: str, **kwargs: Any) -> HTTPResponse:
+        """Alias for urllib3's lower-level request method."""
+        return self.request(method, url, **kwargs)
+
+    def clear(self) -> None:
+        """Compatibility no-op; this facade does not retain connection pools."""
+
+    def close(self) -> None:
+        """Compatibility no-op; requests are completed before returning."""
+
+    def __enter__(self) -> PoolManager:
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        del exc_type, exc, traceback
+        self.close()
+
+
+def request(method: str, url: str, **kwargs: Any) -> HTTPResponse:
+    """Send one request using a fresh policy-bound client."""
+    policy = kwargs.pop("policy", None)
+    if policy is not None and not isinstance(policy, FetchPolicy):
+        raise PolicyError("policy must be a FetchPolicy")
+    return SafeUrllib3Client(policy=policy).request(method, url, **kwargs)
+
+
+__all__ = [
+    "HTTPHeaderDict", "HTTPResponse", "PoolManager", "SafeUrllib3Client", "SafeUrllib3Error",
+    "exceptions", "request",
+]

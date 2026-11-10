@@ -23,18 +23,24 @@ src/safe_egress/
 ├── defaults.py        DEFAULT_POLICY used when callers omit a policy
 ├── client.py          shared validation, DNS pinning, redirects, and HTTP I/O
 ├── errors.py          shared exception types
+├── integrations.py    small Requests response helper exposed at package root
 └── adapters/
-    ├── requests.py    Requests Session integration
-    ├── httpx.py       HTTPX sync and async clients
-    ├── aiohttp.py     aiohttp safe session factory
-    ├── urllib.py      urllib opener
-    ├── urllib3.py     urllib3 client
-    ├── curl_cffi.py   curl-cffi session
-    └── *_compat.py    import-compatible facades
+    ├── requests/
+    │   └── __init__.py Requests Session and module facade
+    ├── httpx/
+    │   └── __init__.py HTTPX sync and async clients
+    ├── aiohttp/
+    │   └── __init__.py safe session factory
+    ├── urllib/
+    │   └── __init__.py urllib opener
+    ├── urllib3/
+    │   └── __init__.py urllib3 client and PoolManager facade
+    └── curl_cffi/
+        └── __init__.py curl-cffi session
 ```
 
-Adapter implementations live under `safe_egress.adapters`. The older imports
-such as `safe_egress.adapters.aiohttp` remain as compatibility paths. The
+Each backend has one implementation file in its own folder. Requests and
+urllib3 include their small import-compatible facades in that same file. The
 package root (`from safe_egress import ...`) exposes the shared API and default
 policy.
 
@@ -108,9 +114,9 @@ The complete library suite was run in an existing Python 3.11.17 environment wit
 PYTHONPATH=src python3.11 -m pytest -q
 ```
 
-Pytest discovery is scoped to the library suite so it does not collect grader tests under `examples/`. The current Python 3.11 source run reports **189 passed, 2 skipped**; `unittest discover` reports **190 tests, 2 skipped**. The skipped checks bind a real loopback listener: one exercises the core fetcher and one exercises allowed local-resource fetching through the adapters. This sandbox denies loopback binds, so those checks skip here; adapter denial and parser-confusion tests pass with socket connections stubbed and asserted unused. The curl-cffi adapter tests use a fake session API; its native curl-cffi runtime still needs validation. No dependencies were installed for these runs; they used the existing Python 3.11 environment.
+Pytest discovery is scoped to the library suite so it does not collect grader tests under `examples/`. Before the current package reorganization, the Python 3.11 source run reported **189 passed, 2 skipped**; `unittest discover` reported **190 tests, 2 skipped**. The skipped checks bind a real loopback listener: one exercises the core fetcher and one exercises allowed local-resource fetching through the adapters. This sandbox denies loopback binds, so those checks skip here; adapter denial and parser-confusion tests passed with socket connections stubbed and asserted unused. The curl-cffi adapter tests use a fake session API; its native curl-cffi runtime still needs validation. No dependencies were installed for those runs; they used the existing Python 3.11 environment.
 
-The latest source wheel was rebuilt with the existing Python 3.13 setuptools backend and installed into a temporary target with `pip --no-index --no-deps`. All 14 packaged Python modules match the current source tree byte-for-byte. The installed-wheel suite reports **189 passed, 2 skipped** under pytest and **190 tests, 2 skipped** under unittest. See the [wheel](results/package-wheel-active-goal-20261020/safe_egress-0.1.0-py3-none-any.whl). Its SHA-256 is `63f389e761af82c84cf385e35cdb95914815d0107a6ea4892bf3c97e119d0bac`. The current system Python 3.11 is missing `setuptools.build_meta`, so wheel building there fails; Python 3.13 built it without installing packages.
+The archived wheel check below predates the per-library package layout. At that revision, the Python 3.13 setuptools build installed into a temporary target with `pip --no-index --no-deps`; all 14 packaged modules matched that source tree byte-for-byte. Its installed-wheel suite reported **189 passed, 2 skipped** under pytest and **190 tests, 2 skipped** under unittest. See the [wheel](results/package-wheel-active-goal-20261020/safe_egress-0.1.0-py3-none-any.whl), SHA-256 `63f389e761af82c84cf385e35cdb95914815d0107a6ea4892bf3c97e119d0bac`. Those results have not been rerun after the package reorganization. The system Python 3.11 is missing `setuptools.build_meta`, so wheel building there fails; Python 3.13 built the archived wheel without installing packages.
 
 Rebuild the wheel from the repository root with:
 
@@ -121,9 +127,9 @@ python3.13 -m pip wheel . --no-deps --no-build-isolation \
 
 Wheel metadata can vary between builds; use the hash in the evaluation report to identify the artifact actually tested.
 
-The current source and installed wheel both pass `unittest discover`: 190 tests, 2 skipped each.
+At the archived revision, the source and installed wheel both passed `unittest discover`: 190 tests, 2 skipped each.
 
-The latest source-matching wheel matrix passed **17/17 phases** in 2.962 seconds using Python 3.13 with urllib3 2.3.0. Its wheel SHA-256 is `63f389e761af82c84cf385e35cdb95914815d0107a6ea4892bf3c97e119d0bac`; all 14 packaged Python modules match the current source. The report records commands, source revisions or tree hashes, import origins, Python/platform details, client dependency versions and timings. Rerun the matrix with [`scripts/evaluate_installed_wheel_cves.py`](scripts/evaluate_installed_wheel_cves.py). It expects the local CVE worktrees and dependencies to already exist; it never installs packages. The [latest matrix report](results/installed-wheel-cve-matrix-active-goal-20261020/evaluation.json) has the complete record. The Crawlee phase sends URLs queued by the vulnerable sitemap loader through a custom Safe Egress `HttpClient`, tests it against the actual abstract base API from both vulnerable v1.6.3 and fixed v1.7.0, and exercises `send_request()` and `crawl()`; it also checks exact-IP private-service allowlisting, `CookieJar` session isolation, cross-origin cookie stripping, and policy/request timeouts. The matrix covers Requests (Local Deep Research and Kolibri), HTTPX (Nanobot and Crawlee), aiohttp (LangChain Community), urllib (PyJWT and Glances), and urllib3. It does not include the curl-cffi runtime case because that dependency is unavailable. All fixtures use synthetic DNS and in-memory responses; they do not open sockets or contact external systems.
+The archived source-matching wheel matrix passed **17/17 phases** in 2.962 seconds using Python 3.13 with urllib3 2.3.0. Its wheel SHA-256 is `63f389e761af82c84cf385e35cdb95914815d0107a6ea4892bf3c97e119d0bac`; all 14 packaged modules matched the source tree at that revision. The report records commands, source revisions or tree hashes, import origins, Python/platform details, client dependency versions and timings. Rerun the matrix with [`scripts/evaluate_installed_wheel_cves.py`](scripts/evaluate_installed_wheel_cves.py). It expects the local CVE worktrees and dependencies to already exist; it never installs packages. The [matrix report](results/installed-wheel-cve-matrix-active-goal-20261020/evaluation.json) has the complete record. The Crawlee phase sends URLs queued by the vulnerable sitemap loader through a custom Safe Egress `HttpClient`, tests it against the actual abstract base API from both vulnerable v1.6.3 and fixed v1.7.0, and exercises `send_request()` and `crawl()`; it also checks exact-IP private-service allowlisting, `CookieJar` session isolation, cross-origin cookie stripping, and policy/request timeouts. The matrix covers Requests (Local Deep Research and Kolibri), HTTPX (Nanobot and Crawlee), aiohttp (LangChain Community), urllib (PyJWT and Glances), and urllib3. It does not include the curl-cffi runtime case because that dependency is unavailable. All fixtures use synthetic DNS and in-memory responses; they do not open sockets or contact external systems.
 
 ```sh
 python3.13 scripts/evaluate_installed_wheel_cves.py \
@@ -144,7 +150,7 @@ The optional `safe-egress-audit` command inventories some common direct network 
 safe-egress-audit path/to/source
 ```
 
-It is a heuristic sink inventory, not taint analysis or proof that SSRF is absent. It recognizes module-level calls and sessions from `requests_compat` as policy-bound; it may still miss wrapper methods, dynamic imports, custom clients, browser traffic, raw socket usage, and indirect session calls.
+It is a heuristic sink inventory, not taint analysis or proof that SSRF is absent. It recognizes module-level calls and sessions from `safe_egress.adapters.requests` as policy-bound; it may still miss wrapper methods, dynamic imports, custom clients, browser traffic, raw socket usage, and indirect session calls.
 
 ## Client adapters
 
@@ -160,7 +166,32 @@ private, loopback, link-local, multicast, reserved, and special-use addresses.
 Start with the defaults; provide a trusted `FetchPolicy` only when the
 application needs a narrower public allowlist or a specific private service.
 
-The optional [`SafeCurlCffiSession`](src/safe_egress/curl_cffi_adapter.py) is a synchronous requests-like wrapper for bounded byte requests. It pins every hop with libcurl `CURLOPT_RESOLVE`, checks the resolved peer in `OPENSOCKETFUNCTION` before creating a socket, rechecks the connected peer before HTTP, disables automatic redirects, proxies, and environment routing, strips sensitive headers across origins, and enforces a response-size cap during receipt. It creates a fresh curl-cffi session per redirect hop. It does not support async requests, WebSockets, streaming, upload forms, impersonation, custom curl options, or a persistent cookie jar; the API is intentionally smaller than curl-cffi's `Session`.
+Create a new immutable policy to customize behavior; do not modify
+`DEFAULT_POLICY`. For example, this allows one private file server at its
+known IP and port:
+
+```python
+from safe_egress import FetchPolicy
+from safe_egress.adapters.aiohttp import safe_aiohttp_session
+
+internal_files = FetchPolicy(
+    allowed_hosts=frozenset({"files.internal.example"}),
+    allowed_ips=frozenset({"10.20.30.40"}),
+    allowed_ports=frozenset({8443}),
+)
+
+async with safe_aiohttp_session(policy=internal_files) as session:
+    async with session.get("https://files.internal.example:8443/report") as response:
+        content = await response.read()
+```
+
+`allowed_hosts` is an exact hostname allowlist. The `allowed_ips` entry is the
+explicit exception that permits that private address; pair the two so another
+hostname cannot use the same exception. Pass the policy when you create the
+client or session. `SafeFetcher(policy=internal_files)` and
+`SafeRequestsSession(policy=internal_files)` use the same pattern.
+
+The optional [`SafeCurlCffiSession`](src/safe_egress/adapters/curl_cffi/__init__.py) is a synchronous requests-like wrapper for bounded byte requests. It pins every hop with libcurl `CURLOPT_RESOLVE`, checks the resolved peer in `OPENSOCKETFUNCTION` before creating a socket, rechecks the connected peer before HTTP, disables automatic redirects, proxies, and environment routing, strips sensitive headers across origins, and enforces a response-size cap during receipt. It creates a fresh curl-cffi session per redirect hop. It does not support async requests, WebSockets, streaming, upload forms, impersonation, custom curl options, or a persistent cookie jar; the API is intentionally smaller than curl-cffi's `Session`.
 
 ```python
 from safe_egress import FetchPolicy, SafeCurlCffiSession
@@ -194,7 +225,7 @@ with SafeRequestsSession() as session:
 For common module-level calls, replace the Requests import with the scoped compatibility facade:
 
 ```python
-import safe_egress.adapters.requests_compat as requests
+import safe_egress.adapters.requests as requests
 
 response = requests.get(user_url, timeout=8)
 with requests.Session() as session:
@@ -223,7 +254,7 @@ with SafeRequestsSession() as session:
 The request policy replaces the session policy for that call, including on redirects. The urllib3 and urllib opener APIs also accept a trusted per-call policy:
 
 ```python
-from safe_egress.adapters.urllib3_compat import PoolManager
+from safe_egress.adapters.urllib3 import PoolManager
 from safe_egress.adapters.urllib import SafeUrllibOpener
 
 with PoolManager() as http:
@@ -290,7 +321,7 @@ content = response.data
 Supported `PoolManager().request(...)` call sites can use an import alias:
 
 ```python
-import safe_egress.adapters.urllib3_compat as urllib3
+import safe_egress.adapters.urllib3 as urllib3
 
 http = urllib3.PoolManager()
 response = http.request("GET", user_url)
@@ -311,14 +342,14 @@ with SafeUrllibOpener().open(user_url, timeout=5) as response:
     content = response.read()
 ```
 
-These adapters do not patch process-wide functions. Requests, HTTPX, urllib3, and urllib request facades route through `SafeFetcher` and buffer bounded request/response bodies. `SafeRequestsSession` preserves the standard Requests cookie jar, supports trusted per-request `policy=` overrides, applies them across redirects, and locks its redirect cap, `mount()` method, environment-trust setting, and public adapter table after setup. It strips sensitive headers across origins and does not call Requests' redirect-auth hook, which can reapply `.netrc` credentials. `SafeClient` and `SafeAsyncClient` accept trusted per-request policies through `request()`, carry them across redirects, and require the override's redirect limit to match the client. `requests_compat` supports common module-level verbs, `Session` and `session()` construction, response/request types, and common exception aliases; it is still a limited facade, not a complete drop-in replacement. `SafeUrllib3Client`, `urllib3_compat`, and `SafeUrllibOpener` accept trusted per-request `policy=` overrides and apply them across redirect hops. The urllib3 facades support a small subset of `PoolManager.request` and module-level `request`; they reject unsupported constructor and request options, and do not implement pools, proxies, retries, streaming, or multipart encoding. `SafeUrllibOpener` handles only HTTP(S), bounded bodies, headers, and numeric timeouts; it does not implement opener handlers, cookies, proxies, custom TLS contexts, or streaming. The aiohttp adapter retains streaming and caps bytes returned by response read methods and iterators at `FetchPolicy.max_response_bytes`. aiohttp may buffer or decompress a chunk before the wrapper can enforce that limit, so the cap does not bound every transient internal allocation. The adapter checks redirects, caps redirect hops, strips sensitive headers on cross-origin hops, and disables proxies, session-wide auth, cookie jars, custom connectors, custom request and response classes, middleware, custom TLS settings, caller-supplied `Host` headers, URL credentials, and per-request cookies. Review each application's required features before using an adapter. The aiohttp adapter uses aiohttp's connector resolver, request-class, and response-class hooks; rerun its tests when upgrading aiohttp.
+These adapters do not patch process-wide functions. Requests, HTTPX, urllib3, and urllib request facades route through `SafeFetcher` and buffer bounded request/response bodies. `SafeRequestsSession` preserves the standard Requests cookie jar, supports trusted per-request `policy=` overrides, applies them across redirects, and locks its redirect cap, `mount()` method, environment-trust setting, and public adapter table after setup. It strips sensitive headers across origins and does not call Requests' redirect-auth hook, which can reapply `.netrc` credentials. `SafeClient` and `SafeAsyncClient` accept trusted per-request policies through `request()`, carry them across redirects, and require the override's redirect limit to match the client. The Requests package also exposes module-level verbs, `Session` and `session()` constructors, response/request types, and common exception aliases; this remains a limited facade, not a complete drop-in replacement. Both `SafeUrllib3Client` and the urllib3 `PoolManager` facade, along with `SafeUrllibOpener`, accept trusted per-request `policy=` overrides and apply them across redirect hops. The urllib3 facades support a small subset of `PoolManager.request` and module-level `request`; they reject unsupported constructor and request options, and do not implement pools, proxies, retries, streaming, or multipart encoding. `SafeUrllibOpener` handles only HTTP(S), bounded bodies, headers, and numeric timeouts; it does not implement opener handlers, cookies, proxies, custom TLS contexts, or streaming. The aiohttp adapter retains streaming and caps bytes returned by response read methods and iterators at `FetchPolicy.max_response_bytes`. aiohttp may buffer or decompress a chunk before the wrapper can enforce that limit, so the cap does not bound every transient internal allocation. The adapter checks redirects, caps redirect hops, strips sensitive headers on cross-origin hops, and disables proxies, session-wide auth, cookie jars, custom connectors, custom request and response classes, middleware, custom TLS settings, caller-supplied `Host` headers, URL credentials, and per-request cookies. Review each application's required features before using an adapter. The aiohttp adapter uses aiohttp's connector resolver, request-class, and response-class hooks; rerun its tests when upgrading aiohttp.
 
 `SafeClient` and `SafeAsyncClient` are the HTTPX integrations for synchronous and asynchronous applications. Both disable environment proxy use and reject options that could replace the policy transport. Their transports are available for explicit wiring; installing one into a general HTTPX client with custom proxy mounts can route around it. `RequestsGet` remains a small GET-only facade for simple call sites.
 
 ## Current boundaries
 
 - The transport uses direct HTTP(S) sockets and does not implement proxies, connection pooling, WebSockets, browser fetches, FTP, or arbitrary TCP protocols.
-- Safe Egress has an experimental curl-cffi adapter with a pre-connect `OPENSOCKETFUNCTION` guard, but curl-cffi's native runtime and CVE fixture remain unverified in this environment; see the [CVE-2026-33752 notes](docs/client-cve-cases.md#experimental-adapter-curl-cffi-runtime-unverified). There is no adapter for Impit or Playwright networking. The Crawlee reproduction selects its optional HTTPX backend; it does not cover the default Impit backend. Crawlee v1 documents Impit as its default, and Impit's exposed Rust-backed `AsyncClient` API has no transport or resolver parameter, so the Safe HTTPX transport cannot be assumed to intercept it. curl-cffi's [maintainer PR #727](https://github.com/lexiforest/curl_cffi/pull/727) adds an opt-in safe redirect mode, while the default still follows redirects and the initial URL is not checked. Safe Egress's [adapter](src/safe_egress/curl_cffi_adapter.py) validates and pins each destination, checks the resolved peer before creating its socket, creates a fresh session per hop, and disables automatic redirects; verify it against the native client before relying on it. See [Crawlee's v1 migration notes](https://github.com/apify/crawlee-python/blob/v1.6.3/docs/upgrading/upgrading_to_v1.md), [Impit's Python API](https://apify.github.io/impit/python/), its [constructor signature](https://github.com/apify/impit/blob/master/impit-python/python/impit/impit.pyi#L3215-L3343), curl-cffi's [security notes](https://curl-cffi.readthedocs.io/en/latest/security.html), [session API](https://curl-cffi.readthedocs.io/en/latest/_modules/curl_cffi/requests/session.html), [low-level resolver option](https://curl-cffi.readthedocs.io/en/latest/_modules/curl_cffi/curl.html), [libcurl reset semantics](https://curl.se/libcurl/c/curl_easy_reset.html), and the [Crawlee case limits](examples/cve-repros/crawlee/README.md).
+- Safe Egress has an experimental curl-cffi adapter with a pre-connect `OPENSOCKETFUNCTION` guard, but curl-cffi's native runtime and CVE fixture remain unverified in this environment; see the [CVE-2026-33752 notes](docs/client-cve-cases.md#experimental-adapter-curl-cffi-runtime-unverified). There is no adapter for Impit or Playwright networking. The Crawlee reproduction selects its optional HTTPX backend; it does not cover the default Impit backend. Crawlee v1 documents Impit as its default, and Impit's exposed Rust-backed `AsyncClient` API has no transport or resolver parameter, so the Safe HTTPX transport cannot be assumed to intercept it. curl-cffi's [maintainer PR #727](https://github.com/lexiforest/curl_cffi/pull/727) adds an opt-in safe redirect mode, while the default still follows redirects and the initial URL is not checked. Safe Egress's [adapter](src/safe_egress/adapters/curl_cffi/__init__.py) validates and pins each destination, checks the resolved peer before creating its socket, creates a fresh session per hop, and disables automatic redirects; verify it against the native client before relying on it. See [Crawlee's v1 migration notes](https://github.com/apify/crawlee-python/blob/v1.6.3/docs/upgrading/upgrading_to_v1.md), [Impit's Python API](https://apify.github.io/impit/python/), its [constructor signature](https://github.com/apify/impit/blob/master/impit-python/python/impit/impit.pyi#L3215-L3343), curl-cffi's [security notes](https://curl-cffi.readthedocs.io/en/latest/security.html), [session API](https://curl-cffi.readthedocs.io/en/latest/_modules/curl_cffi/requests/session.html), [low-level resolver option](https://curl-cffi.readthedocs.io/en/latest/_modules/curl_cffi/curl.html), [libcurl reset semantics](https://curl.se/libcurl/c/curl_easy_reset.html), and the [Crawlee case limits](examples/cve-repros/crawlee/README.md).
 - Application code can bypass the policy by using another network client or opening sockets directly. Route untrusted fetches through a policy-bound client and apply network egress restrictions as a second boundary.
 - The default port policy is intentionally limited to 80 and 443. Add other ports only when the feature needs them.
 - DNS policy depends on the host OS resolver. All returned addresses are checked, then the selected numeric IP is used for the socket, avoiding a second hostname lookup for that connection.

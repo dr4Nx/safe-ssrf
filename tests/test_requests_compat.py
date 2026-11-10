@@ -10,7 +10,7 @@ from safe_egress import FetchPolicy, FetchResponse, PolicyError, SafeFetcher
 
 if importlib.util.find_spec("requests") is not None:
     import requests
-    from safe_egress import requests_compat
+    from safe_egress.adapters import requests as requests_compat
 else:  # pragma: no cover - optional dependency
     requests = None
     requests_compat = None

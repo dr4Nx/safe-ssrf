@@ -17,9 +17,9 @@ try:
 except ImportError as exc:  # pragma: no cover - depends on optional extra
     raise ImportError("SafeHTTPXTransport requires the optional 'httpx' dependency") from exc
 
-from ..client import SafeFetcher
-from ..errors import FetchError
-from ..policy import FetchPolicy
+from ...client import SafeFetcher
+from ...errors import FetchError
+from ...policy import FetchPolicy
 
 
 _REQUEST_POLICY: ContextVar[FetchPolicy | None] = ContextVar(
@@ -336,3 +336,6 @@ class SafeClient(httpx.Client):
             return super().request(method, url, *args, **kwargs)
         finally:
             _REQUEST_POLICY.reset(token)
+
+
+__all__ = ["SafeAsyncClient", "SafeClient", "SafeHTTPXSyncTransport", "SafeHTTPXTransport"]

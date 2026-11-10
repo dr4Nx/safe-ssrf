@@ -15,11 +15,11 @@ except ImportError as exc:  # pragma: no cover - depends on optional test extras
     raise unittest.SkipTest(f"optional HTTP client dependency is unavailable: {exc}") from exc
 
 from safe_egress import PolicyError
-from safe_egress.aiohttp_adapter import safe_aiohttp_session
-from safe_egress.httpx_adapter import SafeAsyncClient, SafeClient
-from safe_egress.requests_adapter import SafeRequestsSession
-from safe_egress.urllib3_adapter import SafeUrllib3Client
-from safe_egress.urllib_adapter import SafeUrllibOpener
+from safe_egress.adapters.aiohttp import safe_aiohttp_session
+from safe_egress.adapters.httpx import SafeAsyncClient, SafeClient
+from safe_egress.adapters.requests import SafeRequestsSession
+from safe_egress.adapters.urllib3 import SafeUrllib3Client
+from safe_egress.adapters.urllib import SafeUrllibOpener
 
 
 _LOOPBACK_RECORDS = [

@@ -18,7 +18,7 @@ from safe_egress import FetchPolicy, FetchResponse, PolicyError
 @unittest.skipIf(urllib3 is None, "install safe-egress[urllib3] to run urllib3 adapter tests")
 class SafeUrllib3ClientTests(unittest.TestCase):
     def test_public_resource_request_returns_urllib3_response(self) -> None:
-        from safe_egress.urllib3_adapter import SafeUrllib3Client
+        from safe_egress.adapters.urllib3 import SafeUrllib3Client
 
         client = SafeUrllib3Client()
         public_ip = ipaddress.ip_address("93.184.216.34")
@@ -48,7 +48,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         self.assertEqual(response.geturl(), "https://public.example/resource")
 
     def test_compressed_response_is_decoded_under_policy_limit(self) -> None:
-        from safe_egress.urllib3_adapter import SafeUrllib3Client
+        from safe_egress.adapters.urllib3 import SafeUrllib3Client
 
         client = SafeUrllib3Client(policy=FetchPolicy(max_response_bytes=1024))
         compressed = gzip.compress(b"PUBLIC_GZIP_FIXTURE")
@@ -72,7 +72,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         self.assertEqual(response.headers.get("Content-Length"), str(len(response.data)))
 
     def test_compressed_expansion_over_policy_limit_is_rejected(self) -> None:
-        from safe_egress.urllib3_adapter import SafeUrllib3Client, SafeUrllib3Error
+        from safe_egress.adapters.urllib3 import SafeUrllib3Client, SafeUrllib3Error
 
         client = SafeUrllib3Client(policy=FetchPolicy(max_response_bytes=1024))
         compressed = gzip.compress(b"A" * 100_000)
@@ -92,7 +92,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         connection.close.assert_called_once()
 
     def test_redirect_to_loopback_is_rejected_before_second_send(self) -> None:
-        from safe_egress.urllib3_adapter import SafeUrllib3Client, SafeUrllib3Error
+        from safe_egress.adapters.urllib3 import SafeUrllib3Client, SafeUrllib3Error
 
         client = SafeUrllib3Client()
         sent: list[str] = []
@@ -118,7 +118,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         self.assertEqual(sent, ["https://public.example/start"])
 
     def test_cross_origin_redirect_strips_configured_secret_headers(self) -> None:
-        from safe_egress.urllib3_adapter import SafeUrllib3Client
+        from safe_egress.adapters.urllib3 import SafeUrllib3Client
 
         policy = FetchPolicy(additional_sensitive_headers=frozenset({"X-Company-Secret"}))
         client = SafeUrllib3Client(policy=policy)
@@ -161,7 +161,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         self.assertNotIn("x-company-secret", sent[1][1])
 
     def test_json_body_and_policy_supported_request_options(self) -> None:
-        from safe_egress.urllib3_adapter import SafeUrllib3Client
+        from safe_egress.adapters.urllib3 import SafeUrllib3Client
 
         policy = FetchPolicy(allowed_hosts=frozenset({"public.example"}))
         client = SafeUrllib3Client(policy=policy)
@@ -190,7 +190,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         self.assertEqual(calls[0][3], 2)
 
     def test_per_request_policy_override_is_rechecked_for_request(self) -> None:
-        from safe_egress.urllib3_adapter import SafeUrllib3Client, SafeUrllib3Error
+        from safe_egress.adapters.urllib3 import SafeUrllib3Client, SafeUrllib3Error
 
         client = SafeUrllib3Client()
         policy = FetchPolicy(
@@ -214,7 +214,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         self.assertEqual(response.data, b"CONTROLLED_LOCAL_FIXTURE")
 
     def test_urllib3_compat_pool_manager_accepts_per_request_policy(self) -> None:
-        from safe_egress.urllib3_compat import PoolManager
+        from safe_egress.adapters.urllib3 import PoolManager
 
         manager = PoolManager()
         policy = FetchPolicy(
@@ -237,7 +237,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
 
     def test_per_request_policy_applies_its_request_body_limit(self) -> None:
         from safe_egress.errors import RequestTooLargeError
-        from safe_egress.urllib3_adapter import SafeUrllib3Client
+        from safe_egress.adapters.urllib3 import SafeUrllib3Client
 
         client = SafeUrllib3Client()
         policy = FetchPolicy(max_request_bytes=4)
@@ -247,7 +247,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         send.assert_not_called()
 
     def test_unsupported_bypass_or_streaming_options_fail_closed(self) -> None:
-        from safe_egress.urllib3_adapter import SafeUrllib3Client
+        from safe_egress.adapters.urllib3 import SafeUrllib3Client
 
         client = SafeUrllib3Client()
         for options in (
@@ -260,7 +260,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
                 client.request("GET", "https://public.example/", **options)
 
     def test_urllib3_compat_pool_manager_blocks_loopback_redirect(self) -> None:
-        from safe_egress.urllib3_compat import PoolManager
+        from safe_egress.adapters.urllib3 import PoolManager
 
         manager = PoolManager()
         sent: list[str] = []
@@ -287,7 +287,7 @@ class SafeUrllib3ClientTests(unittest.TestCase):
         self.assertEqual(sent, ["http://public.example/start"])
 
     def test_urllib3_compat_public_fetch_and_unknown_pool_options(self) -> None:
-        from safe_egress.urllib3_compat import PoolManager, request as urllib3_request
+        from safe_egress.adapters.urllib3 import PoolManager, request as urllib3_request
 
         with self.assertRaises(PolicyError):
             PoolManager(retries=0)

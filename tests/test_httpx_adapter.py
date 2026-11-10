@@ -17,7 +17,7 @@ from safe_egress import FetchPolicy, FetchResponse, SafeFetcher
 @unittest.skipIf(httpx is None, "install safe-egress[httpx] to run HTTPX adapter tests")
 class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
     async def test_httpx_redirect_is_rejected_before_internal_transport(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         locations = (
             "http://127.0.0.1:43127/internal-status",
@@ -43,7 +43,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(sent, ["https://public.example/start"])
 
     async def test_httpx_public_get_returns_fixture_response(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         fetcher = SafeFetcher()
         public_ip = ipaddress.ip_address("93.184.216.34")
@@ -72,7 +72,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(str(response.url), "https://public.example/resource")
 
     async def test_async_httpx_public_fetch_falls_back_after_connection_setup_failure(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         fetcher = SafeFetcher()
         first_ip = ipaddress.ip_address("2606:4700:4700::1111")
@@ -104,7 +104,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.text, "PUBLIC_FIXTURE_CONTENT")
 
     async def test_httpx_unicode_dot_ipv4_alias_is_rejected_before_transport(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         fetcher = SafeFetcher()
         with patch.object(fetcher, "_send") as send:
@@ -115,7 +115,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         send.assert_not_called()
 
     async def test_async_request_accepts_trusted_per_request_policy(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         fetcher = SafeFetcher()
         policy = FetchPolicy(
@@ -145,7 +145,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sent, ["http://127.0.0.1/status"])
 
     async def test_async_per_request_policy_is_carried_across_redirects(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         policy = FetchPolicy(
             allowed_hosts=frozenset({"public.example", "other.example"}),
@@ -180,7 +180,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("x-company-secret", sent[1][1])
 
     async def test_concurrent_async_calls_do_not_share_request_policies(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         fetcher = SafeFetcher()
         policies = {
@@ -212,7 +212,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(observed), set(policies.items()))
 
     async def test_async_httpx_removes_authorization_on_cross_origin_redirect(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         fetcher = SafeFetcher(
             FetchPolicy(additional_sensitive_headers=frozenset({"X-Company-Secret"}))
@@ -268,7 +268,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("x-company-secret", sent[1][1])
 
     async def test_async_httpx_basic_auth_is_not_forwarded_across_origins(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         fetcher = SafeFetcher()
         sent: list[tuple[str, dict[str, str]]] = []
@@ -303,7 +303,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("authorization", sent[1][1])
 
     async def test_async_httpx_cookie_jar_does_not_send_domain_cookie_across_origins(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         fetcher = SafeFetcher()
         sent: list[tuple[str, dict[str, str]]] = []
@@ -335,7 +335,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("cookie", sent[1][1])
 
     async def test_async_httpx_cookie_jar_is_preserved_on_same_origin_redirect(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         fetcher = SafeFetcher()
         sent: list[dict[str, str]] = []
@@ -359,7 +359,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all("cookie" in headers for headers in sent))
 
     async def test_safe_client_rejects_options_that_could_replace_its_transport(self) -> None:
-        from safe_egress.httpx_adapter import SafeAsyncClient
+        from safe_egress.adapters.httpx import SafeAsyncClient
 
         for options in (
             {"proxy": "http://proxy.invalid"},
@@ -374,7 +374,7 @@ class SafeHTTPXTransportTests(unittest.IsolatedAsyncioTestCase):
 @unittest.skipIf(httpx is None, "install safe-egress[httpx] to run HTTPX adapter tests")
 class SafeHTTPXSyncTransportTests(unittest.TestCase):
     def test_sync_httpx_public_fetch_falls_back_after_connection_setup_failure(self) -> None:
-        from safe_egress.httpx_adapter import SafeClient
+        from safe_egress.adapters.httpx import SafeClient
 
         fetcher = SafeFetcher()
         first_ip = ipaddress.ip_address("2606:4700:4700::1111")
@@ -405,7 +405,7 @@ class SafeHTTPXSyncTransportTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.text, "PUBLIC_FIXTURE_CONTENT")
     def test_sync_httpx_redirect_is_rejected_before_internal_transport(self) -> None:
-        from safe_egress.httpx_adapter import SafeClient
+        from safe_egress.adapters.httpx import SafeClient
 
         fetcher = SafeFetcher()
         sent: list[str] = []
@@ -432,7 +432,7 @@ class SafeHTTPXSyncTransportTests(unittest.TestCase):
         self.assertEqual(sent, ["https://public.example/start"])
 
     def test_sync_httpx_public_get_returns_fixture_response(self) -> None:
-        from safe_egress.httpx_adapter import SafeClient
+        from safe_egress.adapters.httpx import SafeClient
 
         fetcher = SafeFetcher()
         public_ip = ipaddress.ip_address("93.184.216.34")
@@ -461,7 +461,7 @@ class SafeHTTPXSyncTransportTests(unittest.TestCase):
         self.assertEqual(str(response.url), "https://public.example/resource")
 
     def test_sync_request_accepts_trusted_per_request_policy(self) -> None:
-        from safe_egress.httpx_adapter import SafeClient
+        from safe_egress.adapters.httpx import SafeClient
 
         fetcher = SafeFetcher()
         policy = FetchPolicy(
@@ -489,7 +489,7 @@ class SafeHTTPXSyncTransportTests(unittest.TestCase):
         self.assertEqual(sent, ["http://127.0.0.1/status"])
 
     def test_sync_httpx_removes_authorization_on_cross_origin_redirect(self) -> None:
-        from safe_egress.httpx_adapter import SafeClient
+        from safe_egress.adapters.httpx import SafeClient
 
         fetcher = SafeFetcher(
             FetchPolicy(additional_sensitive_headers=frozenset({"X-Company-Secret"}))
@@ -545,7 +545,7 @@ class SafeHTTPXSyncTransportTests(unittest.TestCase):
         self.assertNotIn("x-company-secret", sent[1][1])
 
     def test_sync_httpx_basic_auth_is_not_forwarded_across_origins(self) -> None:
-        from safe_egress.httpx_adapter import SafeClient
+        from safe_egress.adapters.httpx import SafeClient
 
         fetcher = SafeFetcher()
         sent: list[tuple[str, dict[str, str]]] = []
@@ -580,7 +580,7 @@ class SafeHTTPXSyncTransportTests(unittest.TestCase):
         self.assertNotIn("authorization", sent[1][1])
 
     def test_sync_httpx_cookie_jar_does_not_send_domain_cookie_across_origins(self) -> None:
-        from safe_egress.httpx_adapter import SafeClient
+        from safe_egress.adapters.httpx import SafeClient
 
         fetcher = SafeFetcher()
         sent: list[tuple[str, dict[str, str]]] = []
@@ -612,7 +612,7 @@ class SafeHTTPXSyncTransportTests(unittest.TestCase):
         self.assertNotIn("cookie", sent[1][1])
 
     def test_sync_httpx_cookie_jar_is_preserved_on_same_origin_redirect(self) -> None:
-        from safe_egress.httpx_adapter import SafeClient
+        from safe_egress.adapters.httpx import SafeClient
 
         fetcher = SafeFetcher()
         sent: list[dict[str, str]] = []
@@ -636,7 +636,7 @@ class SafeHTTPXSyncTransportTests(unittest.TestCase):
         self.assertTrue(all("cookie" in headers for headers in sent))
 
     def test_sync_httpx_rejects_oversized_streaming_request_before_send(self) -> None:
-        from safe_egress.httpx_adapter import SafeClient
+        from safe_egress.adapters.httpx import SafeClient
 
         fetcher = SafeFetcher(FetchPolicy(max_request_bytes=3))
         with patch.object(fetcher, "_send") as send:
@@ -647,7 +647,7 @@ class SafeHTTPXSyncTransportTests(unittest.TestCase):
         send.assert_not_called()
 
     def test_sync_client_rejects_options_that_could_replace_its_transport(self) -> None:
-        from safe_egress.httpx_adapter import SafeClient
+        from safe_egress.adapters.httpx import SafeClient
 
         for options in (
             {"proxy": "http://proxy.invalid"},

@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from safe_egress import FetchPolicy, FetchResponse, PolicyError
-from safe_egress.urllib_adapter import SafeUrllibOpener, SafeUrllibError
+from safe_egress.adapters.urllib import SafeUrllibOpener, SafeUrllibError
 
 
 class SafeUrllibOpenerTests(unittest.TestCase):

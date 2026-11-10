@@ -74,7 +74,7 @@ class _FixtureTransport:
 @unittest.skipIf(aiohttp is None, "install safe-egress[aiohttp] to run aiohttp adapter tests")
 class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
     async def test_stream_writer_rejects_a_chunk_before_it_exceeds_limit(self) -> None:
-        from safe_egress.aiohttp_adapter import _BoundedStreamWriter
+        from safe_egress.adapters.aiohttp import _BoundedStreamWriter
 
         writer = SimpleNamespace(write=AsyncMock())
         bounded = _BoundedStreamWriter(writer, 4)
@@ -85,7 +85,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         writer.write.assert_awaited_once_with(b"abc")
 
     async def test_session_rejects_known_oversized_body_before_connector(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         connector_attempt = AsyncMock()
         with patch.object(aiohttp.TCPConnector, "_create_connection", new=connector_attempt):
@@ -96,7 +96,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         connector_attempt.assert_not_awaited()
 
     async def test_session_caps_unknown_size_streamed_request_body(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         async def request_chunks():
             yield b"OK"
@@ -130,7 +130,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(b"OVER_LIMIT_SENTINEL", request_bytes)
 
     async def test_session_allows_unknown_size_streamed_request_at_limit(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         async def request_chunks():
             yield b"OK"
@@ -171,7 +171,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(b"YZ", request_bytes)
 
     async def test_public_destination_is_returned_as_numeric_address(self) -> None:
-        from safe_egress.aiohttp_adapter import _PolicyResolver
+        from safe_egress.adapters.aiohttp import _PolicyResolver
 
         loop = asyncio.get_running_loop()
         records = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 80))]
@@ -182,7 +182,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result[0]["flags"], socket.AI_NUMERICHOST)
 
     async def test_mixed_public_and_loopback_dns_results_are_rejected(self) -> None:
-        from safe_egress.aiohttp_adapter import _PolicyResolver
+        from safe_egress.adapters.aiohttp import _PolicyResolver
 
         loop = asyncio.get_running_loop()
         records = [
@@ -194,13 +194,13 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
                 await _PolicyResolver(FetchPolicy()).resolve("mixed.example", 80, socket.AF_UNSPEC)
 
     async def test_loopback_literal_is_rejected_without_dns(self) -> None:
-        from safe_egress.aiohttp_adapter import _PolicyResolver
+        from safe_egress.adapters.aiohttp import _PolicyResolver
 
         with self.assertRaises(PolicyError):
             await _PolicyResolver(FetchPolicy()).resolve("127.0.0.1", 80, socket.AF_UNSPEC)
 
     async def test_exact_loopback_ip_exception_is_supported(self) -> None:
-        from safe_egress.aiohttp_adapter import _PolicyResolver
+        from safe_egress.adapters.aiohttp import _PolicyResolver
 
         policy = FetchPolicy(
             allowed_hosts=frozenset({"internal.test"}),
@@ -214,7 +214,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([entry["host"] for entry in result], ["127.0.0.1"])
 
     async def test_exact_ip_exception_allows_only_the_configured_private_answer(self) -> None:
-        from safe_egress.aiohttp_adapter import _PolicyResolver
+        from safe_egress.adapters.aiohttp import _PolicyResolver
 
         peer = "10.20.0.5"
         policy = FetchPolicy(
@@ -235,7 +235,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
                 await _PolicyResolver(policy).resolve("internal.test", 80, socket.AF_UNSPEC)
 
     async def test_rejects_disallowed_ports_and_proxy_options(self) -> None:
-        from safe_egress.aiohttp_adapter import _PolicyResolver, safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import _PolicyResolver, safe_aiohttp_session
 
         with self.assertRaises(PolicyError):
             await _PolicyResolver(FetchPolicy()).resolve("93.184.216.34", 8080, socket.AF_UNSPEC)
@@ -245,7 +245,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
                 await session.get("http://example.com/", proxy="http://proxy.example")
 
     async def test_session_rejects_custom_routing_configuration(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         class CustomResponse(aiohttp.ClientResponse):
             pass
@@ -261,7 +261,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
                 safe_aiohttp_session(**options)
 
     async def test_session_blocks_loopback_before_connector_attempt(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         connector_attempt = AsyncMock()
         with patch.object(aiohttp.TCPConnector, "_create_connection", new=connector_attempt):
@@ -272,7 +272,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         connector_attempt.assert_not_awaited()
 
     async def test_session_rejects_caller_host_header(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         connector_attempt = AsyncMock()
         with patch.object(aiohttp.TCPConnector, "_create_connection", new=connector_attempt):
@@ -286,7 +286,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         connector_attempt.assert_not_awaited()
 
     async def test_session_rejects_url_credentials_and_per_request_cookies(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         async with safe_aiohttp_session() as session:
             with self.assertRaises(PolicyError):
@@ -301,7 +301,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         from multidict import CIMultiDict
         from yarl import URL
 
-        from safe_egress.aiohttp_adapter import _strip_cross_origin_redirect_headers
+        from safe_egress.adapters.aiohttp import _strip_cross_origin_redirect_headers
 
         headers = CIMultiDict(
             {
@@ -329,7 +329,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(headers["X-Public"], "preserved")
 
     async def test_session_enforces_policy_redirect_hop_limit(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         loop = asyncio.get_running_loop()
         records = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 80))]
@@ -363,7 +363,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(b"GET /one HTTP/1.1", requests[1])
 
     async def test_session_allows_public_request_through_policy_resolver(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         loop = asyncio.get_running_loop()
         records = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 80))]
@@ -380,7 +380,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         socket_attempt.assert_awaited_once()
 
     async def test_session_fetches_public_fixture_without_opening_socket(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         loop = asyncio.get_running_loop()
         records = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 80))]
@@ -419,7 +419,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(b"Host: public.example", request_bytes)
 
     async def test_session_caps_buffered_and_streamed_response_reads(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         loop = asyncio.get_running_loop()
         records = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 80))]
@@ -457,7 +457,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(transport.is_closing() for transport in transports))
 
     async def test_session_rechecks_redirect_and_strips_cross_origin_headers(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         loop = asyncio.get_running_loop()
         records = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 80))]
@@ -516,7 +516,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(header, second_request)
 
     async def test_per_request_basic_auth_does_not_cross_origin_redirect(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         loop = asyncio.get_running_loop()
         records = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 80))]
@@ -552,7 +552,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(b"authorization:", second_request)
 
     async def test_session_blocks_public_to_loopback_redirect_before_second_connection(self) -> None:
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         locations = (
             "http://127.0.0.1/internal-status",
@@ -589,7 +589,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
     async def test_ip_literal_policy_is_checked_before_aiohttp_connector(self) -> None:
         from yarl import URL
 
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         async with safe_aiohttp_session(policy=FetchPolicy(allowed_ports=frozenset({8080}))) as session:
             request_class = session._request_class
@@ -599,7 +599,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
     async def test_unicode_dot_ipv4_alias_is_rejected_before_aiohttp_connector(self) -> None:
         from yarl import URL
 
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         async with safe_aiohttp_session() as session:
             url = URL("http://127。0。0。1/internal-status")
@@ -610,7 +610,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
     async def test_explicit_zero_port_is_not_treated_as_default_http_port(self) -> None:
         from yarl import URL
 
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         async with safe_aiohttp_session() as session:
             with self.assertRaises(PolicyError):
@@ -619,7 +619,7 @@ class SafeAiohttpResolverTests(unittest.IsolatedAsyncioTestCase):
     async def test_explicit_private_fixture_url_can_be_prepared(self) -> None:
         from yarl import URL
 
-        from safe_egress.aiohttp_adapter import safe_aiohttp_session
+        from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
         policy = FetchPolicy(
             allowed_hosts=frozenset({"127.0.0.1"}),

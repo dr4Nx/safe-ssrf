@@ -25,15 +25,15 @@ from importlib.metadata import version as distribution_version
 from typing import Any
 from urllib.parse import urljoin
 
-from ..client import SafeFetcher, ValidatedDestination
-from ..errors import (
+from ...client import SafeFetcher, ValidatedDestination
+from ...errors import (
     FetchError,
     PolicyError,
     RedirectLimitError,
     RequestTooLargeError,
     ResponseTooLargeError,
 )
-from ..policy import FetchPolicy
+from ...policy import FetchPolicy
 
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
@@ -415,3 +415,6 @@ class SafeCurlCffiSession:
             raise FetchError("curl-cffi did not report a valid connected peer IP") from exc
         if peer_ip not in destination.addresses:
             raise FetchError("curl-cffi connected to an address outside the validated DNS results")
+
+
+__all__ = ["SafeCurlCffiSession"]

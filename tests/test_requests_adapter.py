@@ -14,7 +14,7 @@ from safe_egress import FetchPolicy, FetchResponse, PolicyError, SafeFetcher
 if importlib.util.find_spec("requests") is not None:
     import requests
     from requests.adapters import BaseAdapter
-    from safe_egress.requests_adapter import SafeRequestsSession
+    from safe_egress.adapters.requests import SafeRequestsSession
 else:  # pragma: no cover - optional dependency
     requests = None
     BaseAdapter = object

@@ -26,14 +26,14 @@ try:
 except ImportError as exc:  # pragma: no cover - depends on optional extra
     raise ImportError("safe_aiohttp_session requires the optional 'aiohttp' dependency") from exc
 
-from ..errors import (
+from ...errors import (
     PolicyError,
     RedirectLimitError,
     RequestTooLargeError,
     ResponseTooLargeError,
 )
-from ..defaults import DEFAULT_POLICY
-from ..policy import FetchPolicy
+from ...defaults import DEFAULT_POLICY
+from ...policy import FetchPolicy
 
 
 class _PolicyResolver(aiohttp.abc.AbstractResolver):
@@ -391,3 +391,6 @@ def safe_aiohttp_session(
     kwargs["request_class"] = _request_class_for(selected_policy)
     kwargs["response_class"] = _response_class_for(selected_policy.max_response_bytes)
     return aiohttp.ClientSession(connector=connector, trust_env=False, **kwargs)
+
+
+__all__ = ["safe_aiohttp_session"]
