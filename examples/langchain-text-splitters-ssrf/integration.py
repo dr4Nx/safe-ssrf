@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from safe_egress import FetchPolicy
-from safe_egress.httpx_adapter import SafeClient
+from safe_egress.adapters.httpx import SafeClient
 
 
 def ssrf_safe_client(**kwargs: Any) -> SafeClient:

@@ -1,7 +1,8 @@
 """Policy-driven outbound HTTP fetching."""
 
 from .client import FetchResponse, SafeFetcher, ValidatedDestination
-from .curl_cffi_adapter import SafeCurlCffiSession
+from .adapters.curl_cffi import SafeCurlCffiSession
+from .defaults import DEFAULT_POLICY
 from .errors import (
     FetchError,
     PolicyError,
@@ -13,6 +14,7 @@ from .integrations import RequestsGet
 from .policy import FetchPolicy
 
 __all__ = [
+    "DEFAULT_POLICY",
     "FetchError",
     "FetchPolicy",
     "FetchResponse",

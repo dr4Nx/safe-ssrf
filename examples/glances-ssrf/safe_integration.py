@@ -13,7 +13,7 @@ from urllib.request import Request
 from urllib.parse import urlsplit
 
 from safe_egress import FetchPolicy
-from safe_egress.urllib_adapter import SafeUrllibOpener
+from safe_egress.adapters.urllib import SafeUrllibOpener
 
 
 class SafePublicIpFetcher:

@@ -15,6 +15,7 @@ from typing import Mapping
 from urllib.parse import quote, urljoin, urlsplit
 
 from .errors import FetchError, PolicyError, RedirectLimitError, RequestTooLargeError, ResponseTooLargeError
+from .defaults import DEFAULT_POLICY
 from .policy import FetchPolicy, normalize_host
 
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
@@ -249,7 +250,7 @@ class SafeFetcher:
     """
 
     def __init__(self, policy: FetchPolicy | None = None) -> None:
-        self.policy = policy or FetchPolicy()
+        self.policy = policy if policy is not None else DEFAULT_POLICY
         self._ssl_context = ssl.create_default_context()
 
     def get(

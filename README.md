@@ -7,20 +7,61 @@ A small Python prototype for fetching attacker-influenced HTTP(S) URLs while enf
 ## Example
 
 ```python
-from safe_egress import FetchPolicy, SafeFetcher
+from safe_egress import SafeFetcher
 
-fetcher = SafeFetcher(
-    FetchPolicy(
-        allowed_ports=frozenset({80, 443}),
-        max_redirects=3,
-        max_response_bytes=2_000_000,
-        timeout_seconds=4.0,
-    )
-)
-
+fetcher = SafeFetcher()  # uses DEFAULT_POLICY
 response = fetcher.get(user_supplied_url)
 if response.status_code == 200:
     process(response.content)
+```
+
+## Where things live
+
+```text
+src/safe_egress/
+├── policy.py          FetchPolicy and address/host rules
+├── defaults.py        DEFAULT_POLICY used when callers omit a policy
+├── client.py          shared validation, DNS pinning, redirects, and HTTP I/O
+├── errors.py          shared exception types
+└── adapters/
+    ├── requests.py    Requests Session integration
+    ├── httpx.py       HTTPX sync and async clients
+    ├── aiohttp.py     aiohttp safe session factory
+    ├── urllib.py      urllib opener
+    ├── urllib3.py     urllib3 client
+    ├── curl_cffi.py   curl-cffi session
+    └── *_compat.py    import-compatible facades
+```
+
+Adapter implementations live under `safe_egress.adapters`. The older imports
+such as `safe_egress.adapters.aiohttp` remain as compatibility paths. The
+package root (`from safe_egress import ...`) exposes the shared API and default
+policy.
+
+## Run the aiohttp SSRF tests by hand
+
+From the repository root, install the optional aiohttp dependency once if it
+isn't already available, then run the CVE reproductions:
+
+```sh
+python3.11 -m pip install -e '.[aiohttp]'
+PYTHONPATH=src python3.11 -m unittest discover \
+  -s examples/cve-repros/aiohttp-ssrf -p 'test_*.py' -v
+```
+
+Expect five passing tests. The `vulnerable_...reaches...` cases show a dummy
+internal response being fetched; the `safe_...` cases show that the same
+destination is rejected, and a public fixture remains fetchable. All DNS and
+HTTP responses are simulated in memory, so these tests need no credentials,
+local server, or public network access. See the [case notes](examples/cve-repros/aiohttp-ssrf/README.md).
+
+To show an actual request reaching a local dummy service, run this command
+instead. It starts a server on `127.0.0.1`, sends one real vulnerable GET, then
+shows both the default policy denial and the address-policy denial. It makes no
+public network requests:
+
+```sh
+PYTHONPATH=src python3.11 examples/cve-repros/aiohttp-ssrf/demo_local.py
 ```
 
 The default policy allows globally routable unicast destinations on ports 80 and 443. It rejects private, loopback, link-local, multicast, reserved, and special-use destinations. Multicast remains denied even if its address is added to `allowed_ips`. The policy supplements Python's `ipaddress` tables for several newer IANA special-purpose assignments; see the [threat model](docs/threat-model.md). Every DNS answer must pass the policy; the fetcher dials a checked numeric address and tries the next checked answer if connection setup fails before any HTTP request is sent. It does not retry write or response failures. HTTPS still uses the original hostname for SNI and certificate verification. Redirects are followed manually and revalidated one hop at a time.
@@ -113,6 +154,12 @@ Install only the client extras you need:
 python -m pip install 'safe-egress[requests,httpx,aiohttp,urllib3]'
 ```
 
+The adapters use [`DEFAULT_POLICY`](src/safe_egress/defaults.py) when no policy is passed. It allows HTTP(S)
+to globally routable unicast IP addresses on ports 80 and 443, and rejects
+private, loopback, link-local, multicast, reserved, and special-use addresses.
+Start with the defaults; provide a trusted `FetchPolicy` only when the
+application needs a narrower public allowlist or a specific private service.
+
 The optional [`SafeCurlCffiSession`](src/safe_egress/curl_cffi_adapter.py) is a synchronous requests-like wrapper for bounded byte requests. It pins every hop with libcurl `CURLOPT_RESOLVE`, checks the resolved peer in `OPENSOCKETFUNCTION` before creating a socket, rechecks the connected peer before HTTP, disables automatic redirects, proxies, and environment routing, strips sensitive headers across origins, and enforces a response-size cap during receipt. It creates a fresh curl-cffi session per redirect hop. It does not support async requests, WebSockets, streaming, upload forms, impersonation, custom curl options, or a persistent cookie jar; the API is intentionally smaller than curl-cffi's `Session`.
 
 ```python
@@ -136,10 +183,9 @@ The adapter's 19 tests exercise DNS pin-rule construction, IPv4/IPv6 socket-addr
 For Requests code that needs a Session:
 
 ```python
-from safe_egress import FetchPolicy
-from safe_egress.requests_adapter import SafeRequestsSession
+from safe_egress.adapters.requests import SafeRequestsSession
 
-with SafeRequestsSession(policy=FetchPolicy()) as session:
+with SafeRequestsSession() as session:
     response = session.get(user_url, headers={"Accept": "text/html"}, timeout=8)
     # The numeric peer Safe Egress validated and connected to.
     peer_ip = response.safe_egress_peer_ip
@@ -148,7 +194,7 @@ with SafeRequestsSession(policy=FetchPolicy()) as session:
 For common module-level calls, replace the Requests import with the scoped compatibility facade:
 
 ```python
-import safe_egress.requests_compat as requests
+import safe_egress.adapters.requests_compat as requests
 
 response = requests.get(user_url, timeout=8)
 with requests.Session() as session:
@@ -164,7 +210,7 @@ An application can supply a trusted, request-specific policy when one fetch need
 
 ```python
 from safe_egress import FetchPolicy
-from safe_egress.requests_adapter import SafeRequestsSession
+from safe_egress.adapters.requests import SafeRequestsSession
 
 internal_files = FetchPolicy(
     allowed_hosts=frozenset({"files.internal.example"}),
@@ -177,8 +223,8 @@ with SafeRequestsSession() as session:
 The request policy replaces the session policy for that call, including on redirects. The urllib3 and urllib opener APIs also accept a trusted per-call policy:
 
 ```python
-from safe_egress.urllib3_compat import PoolManager
-from safe_egress.urllib_adapter import SafeUrllibOpener
+from safe_egress.adapters.urllib3_compat import PoolManager
+from safe_egress.adapters.urllib import SafeUrllibOpener
 
 with PoolManager() as http:
     response = http.request("GET", file_url, policy=internal_files)
@@ -197,7 +243,7 @@ policy = FetchPolicy(additional_sensitive_headers=frozenset({"X-Company-Secret"}
 For synchronous HTTPX code:
 
 ```python
-from safe_egress.httpx_adapter import SafeClient
+from safe_egress.adapters.httpx import SafeClient
 
 with SafeClient() as client:
     response = client.get(user_url)
@@ -206,7 +252,7 @@ with SafeClient() as client:
 For asynchronous HTTPX code:
 
 ```python
-from safe_egress.httpx_adapter import SafeAsyncClient
+from safe_egress.adapters.httpx import SafeAsyncClient
 
 async with SafeAsyncClient(policy=FetchPolicy()) as client:
     response = await client.get(user_url)
@@ -222,10 +268,9 @@ with SafeClient() as client:
 For aiohttp code, create a session with the policy resolver:
 
 ```python
-from safe_egress import FetchPolicy
-from safe_egress.aiohttp_adapter import safe_aiohttp_session
+from safe_egress.adapters.aiohttp import safe_aiohttp_session
 
-async with safe_aiohttp_session(policy=FetchPolicy()) as session:
+async with safe_aiohttp_session() as session:
     async with session.get(user_url) as response:
         content = await response.read()
 ```
@@ -235,7 +280,7 @@ The aiohttp policy is fixed when the session is created; this adapter does not a
 For code that directly uses urllib3, use the narrow request facade:
 
 ```python
-from safe_egress.urllib3_adapter import SafeUrllib3Client
+from safe_egress.adapters.urllib3 import SafeUrllib3Client
 
 http = SafeUrllib3Client()
 response = http.request("GET", user_url)
@@ -245,7 +290,7 @@ content = response.data
 Supported `PoolManager().request(...)` call sites can use an import alias:
 
 ```python
-import safe_egress.urllib3_compat as urllib3
+import safe_egress.adapters.urllib3_compat as urllib3
 
 http = urllib3.PoolManager()
 response = http.request("GET", user_url)
@@ -260,7 +305,7 @@ limited migration aid, not a full urllib3 replacement.
 For standard-library `urllib.request` call sites, use the `urlopen`-style facade:
 
 ```python
-from safe_egress.urllib_adapter import SafeUrllibOpener
+from safe_egress.adapters.urllib import SafeUrllibOpener
 
 with SafeUrllibOpener().open(user_url, timeout=5) as response:
     content = response.read()

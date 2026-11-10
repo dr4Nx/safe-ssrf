@@ -16,8 +16,8 @@ import aiohttp
 from langchain_community.document_loaders.async_html import AsyncHtmlLoader
 
 from safe_egress import FetchPolicy, PolicyError
-from safe_egress.aiohttp_adapter import safe_aiohttp_session
-from safe_egress.requests_adapter import SafeRequestsSession
+from safe_egress.adapters.aiohttp import safe_aiohttp_session
+from safe_egress.adapters.requests import SafeRequestsSession
 
 logger = logging.getLogger(__name__)
 
