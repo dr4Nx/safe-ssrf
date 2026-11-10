@@ -8,6 +8,7 @@ guarded call is stopped by policy before aiohttp opens a connection.
 from __future__ import annotations
 
 import os
+import textwrap
 from typing import Any
 from unittest.mock import AsyncMock, patch
 import warnings
@@ -58,15 +59,13 @@ def main() -> None:
         return _FakeRequest()
 
     try:
-        print("VULNERABLE AsyncHtmlLoader (local 0.2.7 _fetch copy)")
         # This captures the exact URL at aiohttp's request boundary. No socket opens.
         with (
             patch.object(aiohttp.ClientSession, "get", new=fake_get),
             patch.object(AsyncHtmlLoader, "_to_document", new=_to_document),
         ):
             documents = vulnerable_loader.load()
-        print(f"  URL passed to aiohttp: {sent_urls[0]}")
-        print(f"  document content: {documents[0].page_content}")
+        vulnerable_result = documents[0].page_content
     finally:
         vulnerable_loader.session.close()
 
@@ -76,8 +75,9 @@ def main() -> None:
         ignore_load_errors=False,
     )
     connector_attempt = AsyncMock()
+    safe_result = ""
+    connector_opened = False
     try:
-        print("\nSafeAsyncHtmlLoader")
         with (
             patch.object(aiohttp.TCPConnector, "_create_connection", new=connector_attempt),
             patch.object(AsyncHtmlLoader, "_to_document", new=_to_document),
@@ -85,12 +85,33 @@ def main() -> None:
             try:
                 safe_loader.load()
             except Exception as exc:
-                print(f"  rejected: {type(exc).__name__}: {exc}")
+                safe_result = textwrap.shorten(
+                    f"rejected: {type(exc).__name__}: {exc}", width=48, placeholder="..."
+                )
             else:
                 raise AssertionError("the safe loader unexpectedly fetched a loopback URL")
-        print(f"  connector opened: {connector_attempt.await_count > 0}")
+        connector_opened = connector_attempt.await_count > 0
     finally:
         safe_loader.session.close()
+
+    print("LangChain AsyncHtmlLoader comparison (local fixtures)")
+    print(f"{'':24} | {'VULNERABLE 0.2.7':48} | {'SAFE EGRESS':48}")
+    print("-" * 127)
+    print(f"{'URL':24} | {sent_urls[0]:48} | {INTERNAL_URL:48}")
+    print(
+        f"{'Outcome':24} | {'returned dummy internal content':48} | "
+        f"{safe_result:48}"
+    )
+    print(
+        f"{'Network boundary':24} | {'aiohttp.get intercepted; no socket':48} | "
+        f"{f'connector opened: {connector_opened}':48}"
+    )
+    body_summary = (
+        "SIMULATED INTERNAL SERVICE: dummy data"
+        if "SIMULATED INTERNAL SERVICE" in vulnerable_result
+        else textwrap.shorten(vulnerable_result, width=48, placeholder="...")
+    )
+    print(f"{'Returned content':24} | {body_summary:48} | {'(blocked before response)':48}")
 
 
 if __name__ == "__main__":

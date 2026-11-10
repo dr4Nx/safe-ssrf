@@ -23,17 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 class SafeAsyncHtmlLoader(AsyncHtmlLoader):
-    """One-line fetch-boundary replacement for the vulnerable demonstration.
+    """One-line fetch-boundary replacement."""
 
-    It inherits LangChain's initializer unchanged. The synchronous Requests
-    helper remains the upstream implementation, so use
-    SafeWebResearchAsyncHtmlLoader below when that path is part of the flow.
-    """
+    safe_policy = FetchPolicy()
 
     async def _fetch(
         self, url: str, retries: int = 3, cooldown: int = 2, backoff: float = 1.5
     ) -> str:
-        async with safe_aiohttp_session() as session:
+        async with safe_aiohttp_session(policy=self.safe_policy) as session:
             for i in range(retries):
                 try:
                     async with session.get(

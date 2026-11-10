@@ -51,15 +51,23 @@ The harness imports the real retriever and vulnerable loader source. It intercep
 
 The six integration tests cover the vulnerable boundary, loopback blocking in the hardened aiohttp and Requests paths, and successful public-fixture indexing. The original checkout is not modified; the hardened loader is an isolated companion, not a patch to LangChain's installed loader.
 
-For a direct side-by-side demonstration, [`vulnerable_async_html.py`](vulnerable_async_html.py) contains a local copy of the vulnerable 0.2.7 `_fetch()` method. `SafeAsyncHtmlLoader` in [`hardened_async_html.py`](hardened_async_html.py) inherits the same initializer and method body, changing the session line from `aiohttp.ClientSession(...)` to `safe_aiohttp_session()`. The default policy rejects private addresses. Run the loaders and print their outcomes with:
+For an interactive side-by-side demonstration, [`vulnerable_async_html.py`](vulnerable_async_html.py) contains a local copy of the vulnerable 0.2.7 `_fetch()` method. `SafeAsyncHtmlLoader` in [`hardened_async_html.py`](hardened_async_html.py) inherits the same initializer and method body, changing the session line from `aiohttp.ClientSession(...)` to `safe_aiohttp_session(...)`. Run the in-memory comparison with:
 
 ```sh
-(cd ../ssrf-study/checkout/libs/community && \
-  PYTHONPATH=../../../../safe-egress/src:../../../../safe-egress/examples/langchain-ssrf \
-  poetry run python ../../../../safe-egress/examples/langchain-ssrf/demo_loaders.py)
+sh examples/langchain-ssrf/demo.sh
 ```
 
-The vulnerable request is intercepted and returns dummy HTML; the guarded loader rejects loopback before the connector opens. The demo replaces HTML parsing with a tiny stub so the comparison does not depend on BeautifulSoup. `SafeWebResearchAsyncHtmlLoader` is the fuller companion used by the integration checks; it also replaces the synchronous Requests helper. Neither version modifies the LangChain checkout.
+The default demo asks for an HTTP(S) URL, then shows each loader's result in two columns. Try `http://127.0.0.1/internal-status` and `http://public.example/page`. Requests and DNS answers are simulated in memory; URLs typed in this mode are never contacted.
+
+To have one command run the local internal-service comparison and then accept public URLs, use live mode:
+
+```sh
+sh examples/langchain-ssrf/demo.sh --live
+```
+
+The command first starts a temporary HTTP server bound only to `127.0.0.1` on an ephemeral port. Press Enter to use its displayed URL. The vulnerable loader makes a real request to that server and prints its dummy response; the safe loader permits the fixture port solely to demonstrate the IP policy check, then rejects the loopback address before connecting. The expanded output shows how many requests the service received and lists their paths. The server shuts down before the public-URL prompt. If loopback binding is unavailable, the local comparison reports that and the public-URL prompt still appears.
+
+At the public-URL prompt, enter an HTTP(S) URL on its standard port. Live mode resolves the hostname once and pins both clients to the results. It makes real unauthenticated requests only when every DNS answer is globally routable; private or mixed answers use the simulated internal fixture instead. Both loaders use the same explicit headers, timeout, and redirect setting. The server still receives two separate requests and may return different content for each. Redirects are disabled, URL credentials are refused, and live response bodies are capped at 1 MB. For each loader, the output includes the URL, result, transport, response size, and up to 10 wrapped lines of visible page text. The demo replaces LangChain's HTML parsing with a tiny stub so it does not depend on BeautifulSoup. `SafeWebResearchAsyncHtmlLoader` is the fuller companion used by the integration checks; it also replaces the synchronous Requests helper. Neither version modifies the LangChain checkout.
 
 The project’s existing `tests/unit_tests/retrievers/test_web_research.py` passed five tests on both tags in the prepared Poetry environment. Inspection shows these five tests cover only `QuestionListOutputParser`; they do not exercise `WebResearchRetriever`, `AsyncHtmlLoader`, or network fetching. They do not cover LangChain's full test suite or every possible application-specific fetch path.
 

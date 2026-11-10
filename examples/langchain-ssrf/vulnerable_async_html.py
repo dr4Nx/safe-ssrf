@@ -33,7 +33,7 @@ class VulnerableAsyncHtmlLoader(AsyncHtmlLoader):
                             logger.error(f"Failed to decode content from {url}")
                             text = ""
                         return text
-                except (aiohttp.ClientConnectionError, TimeoutError) as exc:
+                except (aiohttp.ClientConnectionError, TimeoutError) as e:
                     if i == retries - 1 and self.ignore_load_errors:
                         logger.warning(f"Error fetching {url} after {retries} retries.")
                         return ""
@@ -42,7 +42,7 @@ class VulnerableAsyncHtmlLoader(AsyncHtmlLoader):
                     else:
                         logger.warning(
                             f"Error fetching {url} with attempt "
-                            f"{i + 1}/{retries}: {exc}. Retrying..."
+                            f"{i + 1}/{retries}: {e}. Retrying..."
                         )
                         await asyncio.sleep(cooldown * backoff**i)
         raise ValueError("retry count exceeded")
